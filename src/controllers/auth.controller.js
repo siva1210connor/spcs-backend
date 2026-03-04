@@ -20,7 +20,7 @@ export const login = asyncHandler(async (req, res) => {
 
   // resend cooldown
   if (existing?.lastSentAt) {
-    const cooldown = Number(env.OTP_RESEND_COOLDOWN_SECONDS ?? 60) * 1000;
+    const cooldown = Number(env.OTP_RESEND_COOLDOWN_SECONDS) * 1000;
     if (Date.now() - existing.lastSentAt < cooldown) {
       return res.status(429).json({
         success: false,

@@ -10,38 +10,285 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
+
 enum Role {
   USER
   ADMIN
 }
 
+enum BookType {
+  HARD_COPY
+  EBOOK
+  AUDIOBOOK
+}
+
+enum BookStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ContentType {
+  NEWS
+  EVENTS
+}
+
+enum OrderStatus {
+  PENDING
+  FULFILLED
+  SHIPPED
+  COMPLETED
+  REFUNDED
+  CANCELLED
+}
+
+enum OrderType {
+  BOOK
+  EBOOK
+  AUDIOBOOK
+}
+
 model User {
-  id        String   @id @default(cuid())
-  name      String?
-  email     String?  @unique
-  phone     String   @unique
-  password  String?
-  role      Role     @default(USER)
+  id       String  @id @default(cuid())
+  name     String?
+  email    String? @unique
+  phone    String  @unique
+  password String?
+  role     Role    @default(USER)
 
   refreshTokens RefreshToken[]
 
+  cart     Cart?
+  wishlist Wishlist?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+model RefreshToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String // store hashed refresh token
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  userAgent String?
+  ip        String?
+  deviceId  String?
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  books     Book[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model RefreshToken {
+model Book {
+  id              String    @id @default(cuid())
+  name            String
+  malayalamName   String?
+  author          String
+  authorMalayalam String?
+  type            BookType
+  bestSeller      Boolean   @default(false)
+  newArrival      Boolean   @default(false)
+  awardWinner     Boolean   @default(false)
+  republication   Boolean   @default(false)
+  highlight       Boolean   @default(false)
+  rank            String?
+  description     String?
+  edition         String?
+  isbn            String?
+  numOfPages      String?
+  publisher       String?
+  language        String?
+  price           Decimal   @db.Decimal(10, 2)
+  discountId      String?
+  discount        Discount? @relation(fields: [discountId], references: [id])
+
+  status BookStatus @default(ACTIVE)
+
+  unlimitedStock Boolean @default(false)
+  stock          Int     @default(0)
+
+  coverImageUrl String?
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  orderItems OrderItem[]
+
+  @@index([discountId])
+  @@index([categoryId])
+  @@index([type])
+  @@index([bestSeller])
+  @@index([newArrival])
+  @@index([status])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id     String @id @default(cuid())
+  cartId String
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id])
+
+  quantity Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, bookId])
+  @@index([bookId])
+}
+
+model Wishlist {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WishlistItem[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model WishlistItem {
   id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
 
-  tokenHash  String   // store hashed refresh token
-  revokedAt  DateTime?
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id])
 
-  userAgent  String?
-  ip         String?
-  deviceId   String?
+  createdAt DateTime @default(now())
+
+  @@unique([wishlistId, bookId])
+  @@index([bookId])
+}
+
+model Slider {
+  id           String   @id @default(cuid())
+  title        String?
+  sliderImgUrl String
+  sliderUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model Discount {
+  id            String   @id @default(cuid())
+  discountCode  String   @unique
+  discountPrice Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  books         Book[]
+  orders        Order[]
+}
+
+model EventItem {
+  id          String      @id @default(cuid())
+  type        ContentType
+  title       String
+  date        DateTime
+  time        String?
+  description String?
+  imageUrl    String?
+  fileLink    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([type, date])
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  title       String?
+  description String
+  userId      String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Order {
+  id      String  @id @default(cuid())
+  orderNo String? @unique
+  userId  String?
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  type   OrderType   @default(BOOK)
+  status OrderStatus @default(PENDING)
+
+  transactionId String? @unique
+
+  subtotal       Decimal @default(0.00) @db.Decimal(10, 2)
+  shippingCharge Decimal @default(0.00) @db.Decimal(10, 2)
+
+  discountId String?
+  discount   Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+
+  total Decimal @default(0.00) @db.Decimal(10, 2) // subtotal - discount + shipping
+
+  items           OrderItem[]
+  shippingAddress OrderShippingAddress?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, status])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model OrderShippingAddress {
+  id      String @id @default(cuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  name     String?
+  address  String?
+  district String?
+  state    String?
+  pinCode  String?
+
+  createdAt DateTime @default(now())
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id])
+
+  quantity Int     @default(1)
+  price    Decimal @default(0.00) @db.Decimal(10, 2) // snapshot price at purchase time
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([bookId])
 }

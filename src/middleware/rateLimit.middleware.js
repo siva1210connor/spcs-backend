@@ -3,19 +3,20 @@ import RedisStore from "rate-limit-redis";
 import { redis } from "../config/redis.js";
 import { env } from "../config/env.js";
 
+const redisStore =
+  redis && redis.isOpen
+    ? new RedisStore({
+        sendCommand: (...args) => redis.sendCommand(args),
+      })
+    : undefined;
+
 export const globalRateLimiter = rateLimit({
   windowMs: env.RATE_LIMIT_WINDOW_MS,
   max: env.RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } },
-  ...(redis
-    ? {
-        store: new RedisStore({
-          sendCommand: (...args) => redis.sendCommand(args),
-        }),
-      }
-    : {}),
+  ...(redisStore ? { store: redisStore } : {}),
 });
 
 export const authRateLimiter = rateLimit({
