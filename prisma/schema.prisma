@@ -48,22 +48,60 @@ enum OrderType {
   AUDIOBOOK
 }
 
+enum RuleType {
+  DISCOUNT
+  SHIPPING
+}
+
+enum AdType {
+  SQUARE
+  BANNER
+}
+
+enum AwardType {
+  AKSHARAPURASKARAM
+  AWARDED
+}
+
 model User {
-  id       String  @id @default(cuid())
+  id       String   @id @default(cuid())
   name     String?
-  email    String? @unique
-  phone    String  @unique
+  email    String?  @unique
+  phone    String   @unique
   password String?
-  role     Role    @default(USER)
+  role     Role     @default(USER)
+  profile  Profile?
 
   refreshTokens RefreshToken[]
 
   cart     Cart?
   wishlist Wishlist?
 
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  orders    Order[]
+  feedbacks Feedback[]
+}
+
+model Profile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  state      String?
+  city       String?
+  district   String?
+  country    String?
+  addressOne String?
+  addressTwo String?
+  pincode    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  orders    Order[]
+
+  @@index([city])
+  @@index([state])
+  @@index([pincode])
 }
 
 model RefreshToken {
@@ -223,13 +261,15 @@ model EventItem {
 }
 
 model Feedback {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   title       String?
   description String
   userId      String?
-  createdAt   DateTime @default(now())
+  user        User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@index([createdAt])
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Order {
@@ -291,4 +331,75 @@ model OrderItem {
 
   @@index([orderId])
   @@index([bookId])
+}
+
+model Offer {
+  id            String   @id @default(cuid())
+  offerImageUrl String
+  link          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model Rule {
+  id   String   @id @default(cuid())
+  type RuleType
+
+  fromPrice Decimal @db.Decimal(10, 2)
+  toPrice   Decimal @db.Decimal(10, 2)
+
+  // For DISCOUNT rules only:
+  isPercentage Boolean @default(false)
+
+  // Meaning depends on type:
+  // - DISCOUNT: percentage value (e.g. 10.00) or flat discount (e.g. 50.00)
+  // - SHIPPING: shipping charge (e.g. 40.00)
+  value Decimal @db.Decimal(10, 2)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+  @@index([type, fromPrice, toPrice])
+}
+
+model Ad {
+  id        String   @id @default(cuid())
+  type      AdType
+  imageUrl  String
+  link      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Award {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  type        AwardType
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Download {
+  id        String   @id @default(cuid())
+  title     String
+  fileUrl   String
+  fileType  String?
+  fileSize  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
 }

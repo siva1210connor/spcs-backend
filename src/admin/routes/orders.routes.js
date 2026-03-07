@@ -19,24 +19,13 @@ import {
 export const adminOrdersRouter = Router();
 
 /**
- * Base: /api/admin/orders
+ * Base: {{base_url}}/admin/orders
  */
 
-// List by section: book | ebook | audiobook
-adminOrdersRouter.get("/:section(book|ebook|audiobook)", validate(listOrdersSchema), adminOrdersListController);
+adminOrdersRouter.get("/:section", validate(listOrdersSchema), adminOrdersListController);
 
-// Detail
-adminOrdersRouter.get(
-  "/:section(book|ebook|audiobook)/order/:orderId",
-  validate(getOrderDetailSchema),
-  adminOrderDetailController
-);
+adminOrdersRouter.get("/:section/order/:orderId", validate(getOrderDetailSchema), adminOrderDetailController);
 
-// Toggle status
 adminOrdersRouter.put("/toggleStatus", validate(toggleOrderStatusSchema), adminToggleStatusController);
-
-// Refund
 adminOrdersRouter.put("/refund", validate(refundOrderSchema), adminRefundController);
-
-// Delete
 adminOrdersRouter.delete("/order", validate(deleteOrderSchema), adminDeleteOrderController);

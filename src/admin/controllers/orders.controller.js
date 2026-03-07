@@ -9,41 +9,30 @@ import {
   deleteOrder,
 } from "../services/orders.service.js";
 
-// Helpers to map route section -> OrderType enum
+// Map validated route section -> OrderType enum
 function typeFromSection(section) {
   if (section === "book") return "BOOK";
   if (section === "ebook") return "EBOOK";
-  if (section === "audiobook") return "AUDIOBOOK";
-  return null;
+  return "AUDIOBOOK"; // section validated by Zod, so only these 3 exist
 }
 
 /**
- * GET /api/admin/orders/:section
+ * GET {{base_url}}/admin/orders/:section
  */
 export const adminOrdersListController = asyncHandler(async (req, res) => {
-  const type = typeFromSection(req.params.section);
-  if (!type) {
-    const err = new Error("Invalid order section");
-    err.statusCode = 400;
-    err.code = "INVALID_ORDER_SECTION";
-    throw err;
-  }
+  const section = req.validated.params.section; // ✅ validated
+  const type = typeFromSection(section);
 
   const data = await listOrders({ type, query: req.validated.query });
   return ok(res, data, "Orders fetched");
 });
 
 /**
- * GET /api/admin/orders/:section/order/:orderId
+ * GET {{base_url}}/admin/orders/:section/order/:orderId
  */
 export const adminOrderDetailController = asyncHandler(async (req, res) => {
-  const type = typeFromSection(req.params.section);
-  if (!type) {
-    const err = new Error("Invalid order section");
-    err.statusCode = 400;
-    err.code = "INVALID_ORDER_SECTION";
-    throw err;
-  }
+  const section = req.validated.params.section; // ✅ validated
+  const type = typeFromSection(section);
 
   const { orderId } = req.validated.params;
   const data = await getOrderDetail({ type, orderId });
@@ -51,7 +40,7 @@ export const adminOrderDetailController = asyncHandler(async (req, res) => {
 });
 
 /**
- * PUT /api/admin/orders/toggleStatus
+ * PUT {{base_url}}/admin/orders/toggleStatus
  * body: { order_id, status: fullfill | cancel }
  */
 export const adminToggleStatusController = asyncHandler(async (req, res) => {
@@ -61,7 +50,7 @@ export const adminToggleStatusController = asyncHandler(async (req, res) => {
 });
 
 /**
- * PUT /api/admin/orders/refund
+ * PUT {{base_url}}/admin/orders/refund
  * body: { order_id }
  */
 export const adminRefundController = asyncHandler(async (req, res) => {
@@ -71,7 +60,7 @@ export const adminRefundController = asyncHandler(async (req, res) => {
 });
 
 /**
- * DELETE /api/admin/orders/order
+ * DELETE {{base_url}}/admin/orders/order
  * body: { order_id }
  */
 export const adminDeleteOrderController = asyncHandler(async (req, res) => {

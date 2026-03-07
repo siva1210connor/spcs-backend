@@ -24,6 +24,7 @@ export const adminBooksRouter = Router();
  * Base path: /api/admin/book
  */
 
+
 // categories
 adminBooksRouter.get("/categories", validate(adminBookCategoriesSchema), adminBookCategoriesController);
 
