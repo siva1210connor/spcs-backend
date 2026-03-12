@@ -14,18 +14,18 @@ export const adminRulesListController = asyncHandler(async (req, res) => {
 });
 
 export const adminRulesCreateController = asyncHandler(async (req, res) => {
-  const data = await adminCreateRule(req.validated.body);
+  const data = await adminCreateRule({ req, input: req.validated.body });
   return ok(res, data, data.msg);
 });
 
 export const adminRulesUpdateController = asyncHandler(async (req, res) => {
   const { ruleId } = req.validated.params;
-  const data = await adminUpdateRule({ ruleId, input: req.validated.body });
+  const data = await adminUpdateRule({ req, ruleId, input: req.validated.body });
   return ok(res, data, data.msg);
 });
 
 export const adminRulesDeleteController = asyncHandler(async (req, res) => {
   const { ruleId } = req.validated.params;
-  const data = await adminDeleteRule({ ruleId });
+  const data = await adminDeleteRule({ req, ruleId });
   return ok(res, data, data.msg);
 });

@@ -27,18 +27,18 @@ export const adminBookGetController = asyncHandler(async (req, res) => {
 });
 
 export const adminBookCreateController = asyncHandler(async (req, res) => {
-  const data = await adminCreateBook({ body: req.validated.body });
+  const data = await adminCreateBook({ req,body: req.validated.body });
   return ok(res, data, data.msg);
 });
 
 export const adminBookUpdateController = asyncHandler(async (req, res) => {
   const { bookId } = req.validated.params;
-  const data = await adminUpdateBook({ bookId, body: req.validated.body });
+  const data = await adminUpdateBook({ req,bookId, body: req.validated.body });
   return ok(res, data, data.msg);
 });
 
 export const adminBookDeleteController = asyncHandler(async (req, res) => {
   const { bookId } = req.validated.params;
-  const data = await adminDeleteBook({ bookId });
+  const data = await adminDeleteBook({ req,bookId });
   return ok(res, data, data.msg);
 });

@@ -1,5 +1,7 @@
 // src/admin/services/rules.service.js
 import { prisma } from "../../config/prisma.js";
+import { createAdminAuditLog } from "../../audit/audit.service.js";
+import { AUDIT_RESOURCE_TYPES } from "../../audit/audit.constants.js";
 
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
@@ -24,7 +26,7 @@ async function assertNoOverlap({ type, fromPrice, toPrice, excludeId }) {
     throw makeError(
       `Active ${type} rule overlaps an existing rule range`,
       409,
-      "RULE_RANGE_OVERLAP"
+      "RULE_RANGE_OVERLAP",
     );
   }
 }
@@ -60,11 +62,16 @@ export async function adminListRules({ query } = {}) {
 
     return rules.map(mapRule);
   } catch (err) {
-    throw makeError("Failed to list rules", 500, "ADMIN_RULES_LIST_FAILED", err);
+    throw makeError(
+      "Failed to list rules",
+      500,
+      "ADMIN_RULES_LIST_FAILED",
+      err,
+    );
   }
 }
 
-export async function adminCreateRule(input) {
+export async function adminCreateRule(req, input) {
   try {
     const type = input.type;
     const fromPrice = input.from_price;
@@ -95,18 +102,41 @@ export async function adminCreateRule(input) {
       },
     });
 
+    await createAdminAuditLog({
+      req,
+      action: "CREATE",
+      resourceType: AUDIT_RESOURCE_TYPES.RULE,
+      resourceId: created.id,
+      message: `Rule created (${created.type})`,
+      beforeJson: null,
+      afterJson: response.rule,
+    });
+
     return { msg: "created successfully", rule: mapRule(created) };
   } catch (err) {
     if (err?.code === "RULE_RANGE_OVERLAP") throw err;
-    throw makeError("Failed to create rule", 500, "ADMIN_RULE_CREATE_FAILED", err);
+    throw makeError(
+      "Failed to create rule",
+      500,
+      "ADMIN_RULE_CREATE_FAILED",
+      err,
+    );
   }
 }
 
-export async function adminUpdateRule({ ruleId, input }) {
+export async function adminUpdateRule({ req, ruleId, input }) {
   try {
     const existing = await prisma.rule.findUnique({
       where: { id: ruleId },
-      select: { id: true, type: true, fromPrice: true, toPrice: true, isActive: true, isPercentage: true },
+      select: {
+        id: true,
+        type: true,
+        fromPrice: true,
+        toPrice: true,
+        isActive: true,
+        isPercentage: true,
+        isActive: true,
+      },
     });
 
     if (!existing) throw makeError("Rule not found", 404, "RULE_NOT_FOUND");
@@ -117,7 +147,12 @@ export async function adminUpdateRule({ ruleId, input }) {
     const nextActive = input.is_active ?? existing.isActive;
 
     if (nextActive) {
-      await assertNoOverlap({ type: nextType, fromPrice: nextFrom, toPrice: nextTo, excludeId: ruleId });
+      await assertNoOverlap({
+        type: nextType,
+        fromPrice: nextFrom,
+        toPrice: nextTo,
+        excludeId: ruleId,
+      });
     }
 
     const nextIsPercentage =
@@ -146,21 +181,70 @@ export async function adminUpdateRule({ ruleId, input }) {
       },
     });
 
+    await createAdminAuditLog({
+      req,
+      action: "UPDATE",
+      resourceType: AUDIT_RESOURCE_TYPES.RULE,
+      resourceId: updated.id,
+      message: `Rule updated (${updated.type})`,
+      beforeJson: mapRule(existing),
+      afterJson: response.rule,
+    });
+
     return { msg: "updated successfully", rule: mapRule(updated) };
   } catch (err) {
     if (err?.code === "RULE_RANGE_OVERLAP") throw err;
     if (err?.code === "RULE_NOT_FOUND") throw err;
-    if (err?.code === "P2025") throw makeError("Rule not found", 404, "RULE_NOT_FOUND", err);
-    throw makeError("Failed to update rule", 500, "ADMIN_RULE_UPDATE_FAILED", err);
+    if (err?.code === "P2025")
+      throw makeError("Rule not found", 404, "RULE_NOT_FOUND", err);
+    throw makeError(
+      "Failed to update rule",
+      500,
+      "ADMIN_RULE_UPDATE_FAILED",
+      err,
+    );
   }
 }
 
-export async function adminDeleteRule({ ruleId }) {
+export async function adminDeleteRule({ req, ruleId }) {
   try {
+    const existing = await prisma.rule.findUnique({
+      where: { id: ruleId },
+      select: {
+        id: true,
+        type: true,
+        fromPrice: true,
+        toPrice: true,
+        isPercentage: true,
+        value: true,
+        isActive: true,
+      },
+    });
+
+    if (!existing) {
+      throw makeError("Rule not found", 404, "RULE_NOT_FOUND");
+    }
     await prisma.rule.delete({ where: { id: ruleId } });
+
+    await createAdminAuditLog({
+      req,
+      action: "DELETE",
+      resourceType: AUDIT_RESOURCE_TYPES.RULE,
+      resourceId: existing.id,
+      message: `Rule deleted (${existing.type})`,
+      beforeJson: mapRule(existing),
+      afterJson: null,
+    });
+
     return { msg: "deleted successfully" };
   } catch (err) {
-    if (err?.code === "P2025") throw makeError("Rule not found", 404, "RULE_NOT_FOUND", err);
-    throw makeError("Failed to delete rule", 500, "ADMIN_RULE_DELETE_FAILED", err);
+    if (err?.code === "P2025")
+      throw makeError("Rule not found", 404, "RULE_NOT_FOUND", err);
+    throw makeError(
+      "Failed to delete rule",
+      500,
+      "ADMIN_RULE_DELETE_FAILED",
+      err,
+    );
   }
 }

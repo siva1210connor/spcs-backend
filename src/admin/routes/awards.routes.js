@@ -8,10 +8,10 @@ import {
   adminDeleteAwardSchema,
 } from "../validators/awards.validator.js";
 import {
-  adminAwardsListController,
-  adminAwardsCreateController,
-  adminAwardsUpdateController,
-  adminAwardsDeleteController,
+  adminListAwards,
+  adminCreateAward,
+  adminUpdateAward,
+  adminDeleteAward
 } from "../controllers/awards.controller.js";
 
 export const adminAwardsRouter = Router();
@@ -20,7 +20,7 @@ export const adminAwardsRouter = Router();
  * Base: {{base_url}}/admin/awards
  */
 
-adminAwardsRouter.get("/", validate(adminListAwardsSchema), adminAwardsListController);
-adminAwardsRouter.post("/", validate(adminCreateAwardSchema), adminAwardsCreateController);
-adminAwardsRouter.put("/:id", validate(adminUpdateAwardSchema), adminAwardsUpdateController);
-adminAwardsRouter.delete("/:id", validate(adminDeleteAwardSchema), adminAwardsDeleteController);
+adminAwardsRouter.get("/", validate(adminListAwardsSchema), adminListAwards);
+adminAwardsRouter.post("/", validate(adminCreateAwardSchema), adminCreateAward);
+adminAwardsRouter.put("/:id", validate(adminUpdateAwardSchema), adminUpdateAward);
+adminAwardsRouter.delete("/:id", validate(adminDeleteAwardSchema), adminDeleteAward);

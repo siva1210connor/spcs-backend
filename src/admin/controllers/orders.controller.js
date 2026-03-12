@@ -45,7 +45,7 @@ export const adminOrderDetailController = asyncHandler(async (req, res) => {
  */
 export const adminToggleStatusController = asyncHandler(async (req, res) => {
   const { order_id, status } = req.validated.body;
-  const data = await toggleOrderStatus({ orderId: order_id, action: status });
+  const data = await toggleOrderStatus({ req,orderId: order_id, action: status });
   return ok(res, data, data.msg);
 });
 
@@ -55,7 +55,7 @@ export const adminToggleStatusController = asyncHandler(async (req, res) => {
  */
 export const adminRefundController = asyncHandler(async (req, res) => {
   const { order_id } = req.validated.body;
-  const data = await refundOrder({ orderId: order_id });
+  const data = await refundOrder({ req, orderId: order_id });
   return ok(res, data, data.msg);
 });
 
@@ -65,6 +65,6 @@ export const adminRefundController = asyncHandler(async (req, res) => {
  */
 export const adminDeleteOrderController = asyncHandler(async (req, res) => {
   const { order_id } = req.validated.body;
-  const data = await deleteOrder({ orderId: order_id });
+  const data = await deleteOrder({ req, orderId: order_id });
   return ok(res, data, data.msg);
 });

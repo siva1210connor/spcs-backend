@@ -110,53 +110,150 @@ export async function listSliders({ page, limit }) {
     throw makeError("Failed to list sliders", 500, "SLIDER_LIST_FAILED", err);
   }
 }
-
-export async function updateSlider({ id, body }) {
+export async function createSlider({ req, body }) {
   try {
-    // build prisma update data so null is allowed and undefined is ignored
+    const created = await prisma.slider.create({
+      data: {
+        title: body.title ?? null,
+        sliderImgUrl: body.slider_img_url,
+        sliderUrl: body.slider_url ?? null,
+      },
+      select: {
+        id: true,
+        title: true,
+        sliderImgUrl: true,
+        sliderUrl: true,
+      },
+    });
+
+    const response = {
+      msg: "created successfully",
+      item: {
+        id: created.id,
+        title: created.title,
+        slider_img_url: created.sliderImgUrl,
+        slider_url: created.sliderUrl,
+      },
+    };
+
+    await createAdminAuditLog({
+      req,
+      action: "CREATE",
+      resourceType: AUDIT_RESOURCE_TYPES.SLIDER,
+      resourceId: created.id,
+      message: "Slider created",
+      beforeJson: null,
+      afterJson: response.item,
+    });
+
+    return response;
+  } catch (err) {
+    throw makeError("Failed to create slider", 500, "SLIDER_CREATE_FAILED", err);
+  }
+}
+export async function updateSlider({ req, id, body }) {
+  try {
+    const existing = await prisma.slider.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        sliderImgUrl: true,
+        sliderUrl: true,
+      },
+    });
+
+    if (!existing) {
+      throw makeError("Slider not found", 404, "SLIDER_NOT_FOUND");
+    }
+
     const data = {};
 
-    if (Object.prototype.hasOwnProperty.call(body, "title"))
-      data.title = body.title;
-    if (Object.prototype.hasOwnProperty.call(body, "slider_img_url"))
-      data.sliderImgUrl = body.slider_img_url;
-    if (Object.prototype.hasOwnProperty.call(body, "slider_url"))
-      data.sliderUrl = body.slider_url;
+    if (Object.prototype.hasOwnProperty.call(body, "title")) data.title = body.title;
+    if (Object.prototype.hasOwnProperty.call(body, "slider_img_url")) data.sliderImgUrl = body.slider_img_url;
+    if (Object.prototype.hasOwnProperty.call(body, "slider_url")) data.sliderUrl = body.slider_url;
 
     const updated = await prisma.slider.update({
       where: { id },
       data,
-      select: { id: true },
+      select: {
+        id: true,
+        title: true,
+        sliderImgUrl: true,
+        sliderUrl: true,
+      },
     });
 
-    return { msg: "edit successful", slider_id: updated.id };
+    await createAdminAuditLog({
+      req,
+      action: "UPDATE",
+      resourceType: AUDIT_RESOURCE_TYPES.SLIDER,
+      resourceId: updated.id,
+      message: "Slider updated",
+      beforeJson: {
+        id: existing.id,
+        title: existing.title,
+        slider_img_url: existing.sliderImgUrl,
+        slider_url: existing.sliderUrl,
+      },
+      afterJson: {
+        id: updated.id,
+        title: updated.title,
+        slider_img_url: updated.sliderImgUrl,
+        slider_url: updated.sliderUrl,
+      },
+    });
+
+    return { msg: "edit successful" };
   } catch (err) {
-    // Prisma not found => P2025
     if (err?.code === "P2025") {
       throw makeError("Slider not found", 404, "SLIDER_NOT_FOUND", err);
     }
-    throw makeError(
-      "Failed to update slider",
-      500,
-      "SLIDER_UPDATE_FAILED",
-      err,
-    );
+    if (err?.code && err?.statusCode) throw err;
+    throw makeError("Failed to update slider", 500, "SLIDER_UPDATE_FAILED", err);
   }
 }
-
-export async function deleteSlider({ id }) {
+export async function deleteSlider({ req, id }) {
   try {
-    await prisma.slider.delete({ where: { id } });
+    const existing = await prisma.slider.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        sliderImgUrl: true,
+        sliderUrl: true,
+      },
+    });
+
+    if (!existing) {
+      throw makeError("Slider not found", 404, "SLIDER_NOT_FOUND");
+    }
+
+    await prisma.slider.delete({
+      where: { id },
+    });
+
+    await createAdminAuditLog({
+      req,
+      action: "DELETE",
+      resourceType: AUDIT_RESOURCE_TYPES.SLIDER,
+      resourceId: existing.id,
+      message: "Slider deleted",
+      beforeJson: {
+        id: existing.id,
+        title: existing.title,
+        slider_img_url: existing.sliderImgUrl,
+        slider_url: existing.sliderUrl,
+      },
+      afterJson: null,
+    });
+
     return { msg: "successfully deleted" };
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError("Slider not found", 404, "SLIDER_NOT_FOUND", err);
     }
-    throw makeError(
-      "Failed to delete slider",
-      500,
-      "SLIDER_DELETE_FAILED",
-      err,
-    );
+    if (err?.code && err?.statusCode) throw err;
+    throw makeError("Failed to delete slider", 500, "SLIDER_DELETE_FAILED", err);
   }
 }

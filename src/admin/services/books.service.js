@@ -1,5 +1,7 @@
 // src/admin/services/books.service.js
 import { prisma } from "../../config/prisma.js";
+import { createAdminAuditLog } from "../../audit/audit.service.js";
+import { AUDIT_RESOURCE_TYPES } from "../../audit/audit.constants.js";
 
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
@@ -95,7 +97,8 @@ function mapUpdateBodyToData(body) {
   const data = {};
 
   const setIfPresent = (key, value) => {
-    if (Object.prototype.hasOwnProperty.call(body, key)) data[value[0]] = value[1];
+    if (Object.prototype.hasOwnProperty.call(body, key))
+      data[value[0]] = value[1];
   };
 
   // Required-ish fields
@@ -122,7 +125,8 @@ function mapUpdateBodyToData(body) {
   if (body.republication !== undefined) data.republication = body.republication;
   if (body.highlight !== undefined) data.highlight = body.highlight;
   setIfPresent("rank", ["rank", body.rank]);
-  if (body.unlimited_stock !== undefined) data.unlimitedStock = body.unlimited_stock;
+  if (body.unlimited_stock !== undefined)
+    data.unlimitedStock = body.unlimited_stock;
   if (body.stock !== undefined) data.stock = body.stock;
   setIfPresent("cover_image_url", ["coverImageUrl", body.cover_image_url]);
 
@@ -136,7 +140,12 @@ export async function adminListCategories() {
       select: { id: true, name: true },
     });
   } catch (err) {
-    throw makeError("Failed to list categories", 500, "ADMIN_CATEGORIES_LIST_FAILED", err);
+    throw makeError(
+      "Failed to list categories",
+      500,
+      "ADMIN_CATEGORIES_LIST_FAILED",
+      err,
+    );
   }
 }
 
@@ -180,7 +189,12 @@ export async function adminListBooks({ query }) {
       totalPages: Math.ceil(total / limit),
     };
   } catch (err) {
-    throw makeError("Failed to list books", 500, "ADMIN_BOOKS_LIST_FAILED", err);
+    throw makeError(
+      "Failed to list books",
+      500,
+      "ADMIN_BOOKS_LIST_FAILED",
+      err,
+    );
   }
 }
 
@@ -249,18 +263,24 @@ export async function adminGetBook({ bookId }) {
     };
   } catch (err) {
     if (err?.code && err?.statusCode) throw err;
-    throw makeError("Failed to fetch book", 500, "ADMIN_BOOK_FETCH_FAILED", err);
+    throw makeError(
+      "Failed to fetch book",
+      500,
+      "ADMIN_BOOK_FETCH_FAILED",
+      err,
+    );
   }
 }
 
-export async function adminCreateBook({ body }) {
+export async function adminCreateBook({ req, body }) {
   try {
     // Validate category exists
     const category = await prisma.category.findUnique({
       where: { id: body.category },
       select: { id: true },
     });
-    if (!category) throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND");
+    if (!category)
+      throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND");
 
     // If discount provided, validate it exists
     if (body.discount) {
@@ -268,7 +288,8 @@ export async function adminCreateBook({ body }) {
         where: { id: body.discount },
         select: { id: true },
       });
-      if (!discount) throw makeError("Discount not found", 404, "ADMIN_DISCOUNT_NOT_FOUND");
+      if (!discount)
+        throw makeError("Discount not found", 404, "ADMIN_DISCOUNT_NOT_FOUND");
     }
 
     const data = mapCreateBodyToData(body);
@@ -278,21 +299,66 @@ export async function adminCreateBook({ body }) {
       select: { id: true },
     });
 
+    await createAdminAuditLog({
+      req,
+      action: "CREATE",
+      resourceType: AUDIT_RESOURCE_TYPES.BOOK,
+      resourceId: created.id,
+      message: "Book created",
+      beforeJson: null,
+      afterJson: {
+        book_id: created.id,
+        ...body,
+      },
+    });
+
     return { msg: "created successfully", book_id: created.id };
   } catch (err) {
     if (err?.code && err?.statusCode) throw err;
-    throw makeError("Failed to create book", 500, "ADMIN_BOOK_CREATE_FAILED", err);
+    throw makeError(
+      "Failed to create book",
+      500,
+      "ADMIN_BOOK_CREATE_FAILED",
+      err,
+    );
   }
 }
 
-export async function adminUpdateBook({ bookId, body }) {
+export async function adminUpdateBook({ req, bookId, body }) {
   try {
     // Ensure book exists
     const existing = await prisma.book.findUnique({
       where: { id: bookId },
-      select: { id: true },
+      select: {
+        id: true,
+        name: true,
+        malayalamName: true,
+        author: true,
+        authorMalayalam: true,
+        type: true,
+        bestSeller: true,
+        newArrival: true,
+        awardWinner: true,
+        republication: true,
+        highlight: true,
+        rank: true,
+        description: true,
+        edition: true,
+        isbn: true,
+        numOfPages: true,
+        publisher: true,
+        language: true,
+        price: true,
+        status: true,
+        unlimitedStock: true,
+        stock: true,
+        coverImageUrl: true,
+        categoryId: true,
+        discountId: true,
+      },
     });
-    if (!existing) throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND");
+    if (!existing)
+      throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND");
 
     // Validate category/discount if provided
     if (body.category) {
@@ -300,15 +366,20 @@ export async function adminUpdateBook({ bookId, body }) {
         where: { id: body.category },
         select: { id: true },
       });
-      if (!category) throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND");
+      if (!category)
+        throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND");
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, "discount") && body.discount) {
+    if (
+      Object.prototype.hasOwnProperty.call(body, "discount") &&
+      body.discount
+    ) {
       const discount = await prisma.discount.findUnique({
         where: { id: body.discount },
         select: { id: true },
       });
-      if (!discount) throw makeError("Discount not found", 404, "ADMIN_DISCOUNT_NOT_FOUND");
+      if (!discount)
+        throw makeError("Discount not found", 404, "ADMIN_DISCOUNT_NOT_FOUND");
     }
 
     const data = mapUpdateBodyToData(body);
@@ -319,20 +390,98 @@ export async function adminUpdateBook({ bookId, body }) {
       select: { id: true },
     });
 
+    const updatedBook = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: {
+        id: true,
+        name: true,
+        malayalamName: true,
+        author: true,
+        authorMalayalam: true,
+        type: true,
+        bestSeller: true,
+        newArrival: true,
+        awardWinner: true,
+        republication: true,
+        highlight: true,
+        rank: true,
+        description: true,
+        edition: true,
+        isbn: true,
+        numOfPages: true,
+        publisher: true,
+        language: true,
+        price: true,
+        status: true,
+        unlimitedStock: true,
+        stock: true,
+        coverImageUrl: true,
+        categoryId: true,
+        discountId: true,
+      },
+    });
+
+    await createAdminAuditLog({
+      req,
+      action: "UPDATE",
+      resourceType: AUDIT_RESOURCE_TYPES.BOOK,
+      resourceId: bookId,
+      message: "Book updated",
+      beforeJson: existing,
+      afterJson: updatedBook,
+    });
+
     return { msg: "updated successfully" };
   } catch (err) {
     if (err?.code && err?.statusCode) throw err;
-    if (err?.code === "P2025") throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND", err);
-    throw makeError("Failed to update book", 500, "ADMIN_BOOK_UPDATE_FAILED", err);
+    if (err?.code === "P2025")
+      throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND", err);
+    throw makeError(
+      "Failed to update book",
+      500,
+      "ADMIN_BOOK_UPDATE_FAILED",
+      err,
+    );
   }
 }
 
-export async function adminDeleteBook({ bookId }) {
+export async function adminDeleteBook({ req, bookId }) {
   try {
+    const existing = await prisma.book.findUnique({
+      where: { id: bookId },
+      select: {
+        id: true,
+        name: true,
+        author: true,
+        price: true,
+        categoryId: true,
+        status: true,
+      },
+    });
+
+    if (!existing) {
+      throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND",err);
+    }
     await prisma.book.delete({ where: { id: bookId } });
+    await createAdminAuditLog({
+      req,
+      action: "DELETE",
+      resourceType: AUDIT_RESOURCE_TYPES.BOOK,
+      resourceId: existing.id,
+      message: "Book deleted",
+      beforeJson: existing,
+      afterJson: null,
+    });
+
     return { msg: "deleted successfully" };
   } catch (err) {
-    if (err?.code === "P2025") throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND", err);
-    throw makeError("Failed to delete book", 500, "ADMIN_BOOK_DELETE_FAILED", err);
+    if (err?.code === "P2025")
+      throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND", err);
+    throw makeError(
+      "Failed to delete book",
+      500,
+      "ADMIN_BOOK_DELETE_FAILED",
+      err,
+    );
   }
 }

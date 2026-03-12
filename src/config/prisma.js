@@ -1,8 +1,33 @@
-import { PrismaClient } from "@prisma/client";
+// src/config/prisma.js
+import "dotenv/config";
+import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { env } from "./env.js";
+import { PrismaClient } from "@prisma/client";
 
-const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
-export const prisma = new PrismaClient({
-  adapter,
-});
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL is missing");
+}
+
+const globalForPrisma = globalThis;
+
+const pool =
+  globalForPrisma.__pgPool ||
+  new Pool({
+    connectionString,
+  });
+
+const adapter = globalForPrisma.__prismaAdapter || new PrismaPg(pool);
+
+export const prisma =
+  globalForPrisma.__prisma ||
+  new PrismaClient({
+    adapter,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.__pgPool = pool;
+  globalForPrisma.__prismaAdapter = adapter;
+  globalForPrisma.__prisma = prisma;
+}

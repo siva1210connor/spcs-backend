@@ -14,18 +14,18 @@ export const adminAdsListController = asyncHandler(async (req, res) => {
 });
 
 export const adminAdsCreateController = asyncHandler(async (req, res) => {
-  const data = await adminCreateAd(req.validated.body);
+  const data = await adminCreateAd(res, req.validated.body);
   return ok(res, data, data.msg);
 });
 
 export const adminAdsUpdateController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await adminUpdateAd({ id, input: req.validated.body });
+  const data = await adminUpdateAd({ res, id, input: req.validated.body });
   return ok(res, data, data.msg);
 });
 
 export const adminAdsDeleteController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await adminDeleteAd({ id });
+  const data = await adminDeleteAd({ res, id });
   return ok(res, data, data.msg);
 });

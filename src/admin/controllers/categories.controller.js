@@ -21,7 +21,7 @@ export const adminCategoriesListController = asyncHandler(async (req, res) => {
  */
 export const adminCategoryCreateController = asyncHandler(async (req, res) => {
   const { name } = req.validated.body;
-  const data = await adminCreateCategory({ name });
+  const data = await adminCreateCategory({ req, name });
   return ok(res, data, "Category created");
 });
 
@@ -31,7 +31,7 @@ export const adminCategoryCreateController = asyncHandler(async (req, res) => {
 export const adminCategoryUpdateController = asyncHandler(async (req, res) => {
   const { categoryId } = req.validated.params;
   const { name } = req.validated.body;
-  const data = await adminUpdateCategory({ categoryId, name });
+  const data = await adminUpdateCategory({ req, categoryId, name });
   return ok(res, data, "Category updated");
 });
 
@@ -40,6 +40,6 @@ export const adminCategoryUpdateController = asyncHandler(async (req, res) => {
  */
 export const adminCategoryDeleteController = asyncHandler(async (req, res) => {
   const { categoryId } = req.validated.params;
-  const data = await adminDeleteCategory({ categoryId });
+  const data = await adminDeleteCategory({ req, categoryId });
   return ok(res, data, data.msg);
 });

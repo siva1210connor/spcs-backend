@@ -12,6 +12,15 @@ import { adminEventsRouter } from "./events.routes.js";
 import { adminAdsRouter } from "./ads.routes.js";
 import { adminAwardsRouter } from "./awards.routes.js";
 import { adminDownloadsRouter } from "./downloads.routes.js";
+import { adminCatalogueRouter } from "./catalogue.routes.js";
+import { adminArchivesRouter } from "./archives.routes.js";
+import { adminBulletinRouter } from "./bulletin.routes.js";
+import { adminFeedbackRouter } from "./feedback.routes.js";
+import { adminReviewsRouter } from "./reviews.routes.js";
+import { adminSchemeRouter } from "./scheme.routes.js";
+import { adminGalleryRouter } from "./gallery.routes.js";
+import { adminUploadRouter } from "../../upload/index.js";
+import { adminAuditLogsRouter } from "./audit-logs.routes.js";
 
 export const adminRouter = Router();
 
@@ -27,3 +36,12 @@ adminRouter.use("/events", adminEventsRouter);
 adminRouter.use("/ads", adminAdsRouter);
 adminRouter.use("/awards", adminAwardsRouter);
 adminRouter.use("/downloads", adminDownloadsRouter);
+adminRouter.use("/catalogue", adminCatalogueRouter);
+adminRouter.use("/archives", adminArchivesRouter);
+adminRouter.use("/bulletin", adminBulletinRouter);
+adminRouter.use("/feedback", adminFeedbackRouter);
+adminRouter.use("/reviews", adminReviewsRouter);
+adminRouter.use("/scheme", adminSchemeRouter);
+adminRouter.use("/gallery", adminGalleryRouter);
+adminRouter.use("/uploads", adminUploadRouter);
+adminRouter.use("/audit-logs", adminAuditLogsRouter);

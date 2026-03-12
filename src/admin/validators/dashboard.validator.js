@@ -24,6 +24,13 @@ export const listSlidersSchema = z.object({
     limit: paginationSchema.shape.limit,
   }),
 });
+export const createSliderSchema = z.object({
+  body: z.object({
+    title: z.string().min(1).max(200).nullable().optional(),
+    slider_img_url: z.string().url("slider_img_url must be a valid URL"),
+    slider_url: z.string().url("slider_url must be a valid URL").nullable().optional(),
+  }),
+});
 
 export const updateSliderSchema = z.object({
   params: z.object({

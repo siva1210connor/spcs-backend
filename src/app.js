@@ -5,12 +5,15 @@ import { securityMiddleware } from "./middleware/security.middleware.js";
 import { globalRateLimiter } from "./middleware/rateLimit.middleware.js";
 import { apiRouter } from "./routes/index.js";
 import { notFound, errorHandler } from "./middleware/error.middleware.js";
+import path from "path";
 
 export function createApp() {
   const app = express();
 
   // Request logging
   app.use(httpLogger);
+
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   // Body parsing
   app.use(express.json({ limit: "1mb" }));

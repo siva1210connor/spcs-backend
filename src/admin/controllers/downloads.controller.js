@@ -14,18 +14,22 @@ export const adminDownloadsListController = asyncHandler(async (req, res) => {
 });
 
 export const adminDownloadsCreateController = asyncHandler(async (req, res) => {
-  const data = await adminCreateDownload(req.validated.body);
+  const data = await adminCreateDownload(req, req.validated.body);
   return ok(res, data, data.msg);
 });
 
 export const adminDownloadsUpdateController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await adminUpdateDownload({ id, input: req.validated.body });
+  const data = await adminUpdateDownload({
+    req,
+    id,
+    input: req.validated.body,
+  });
   return ok(res, data, data.msg);
 });
 
 export const adminDownloadsDeleteController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await adminDeleteDownload({ id });
+  const data = await adminDeleteDownload({ req, id });
   return ok(res, data, data.msg);
 });

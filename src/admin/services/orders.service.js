@@ -1,5 +1,7 @@
 // src/admin/services/orders.service.js
 import { prisma } from "../../config/prisma.js";
+import { createAdminAuditLog } from "../../audit/audit.service.js";
+import { AUDIT_RESOURCE_TYPES } from "../../audit/audit.constants.js";
 
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
@@ -90,7 +92,12 @@ export async function listOrders({ type, query }) {
       totalPages: Math.ceil(total / limit),
     };
   } catch (err) {
-    throw makeError("Failed to list orders", 500, "ADMIN_ORDERS_LIST_FAILED", err);
+    throw makeError(
+      "Failed to list orders",
+      500,
+      "ADMIN_ORDERS_LIST_FAILED",
+      err,
+    );
   }
 }
 
@@ -117,7 +124,13 @@ export async function getOrderDetail({ type, orderId }) {
         user: { select: { name: true, email: true, phone: true } },
 
         shippingAddress: {
-          select: { name: true, address: true, district: true, state: true, pinCode: true },
+          select: {
+            name: true,
+            address: true,
+            district: true,
+            state: true,
+            pinCode: true,
+          },
         },
 
         items: {
@@ -130,7 +143,8 @@ export async function getOrderDetail({ type, orderId }) {
       },
     });
 
-    if (!order) throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
+    if (!order)
+      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
 
     const discountPrice = order.discount?.discountPrice ?? 0;
 
@@ -169,50 +183,163 @@ export async function getOrderDetail({ type, orderId }) {
     };
   } catch (err) {
     if (err?.code && err?.statusCode) throw err;
-    throw makeError("Failed to fetch order detail", 500, "ADMIN_ORDER_DETAIL_FAILED", err);
+    throw makeError(
+      "Failed to fetch order detail",
+      500,
+      "ADMIN_ORDER_DETAIL_FAILED",
+      err,
+    );
   }
 }
 
-export async function toggleOrderStatus({ orderId, action }) {
+export async function toggleOrderStatus({ req, orderId, action }) {
   try {
+    const existing = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNo: true,
+        status: true,
+        type: true,
+        total: true,
+        userId: true,
+      },
+    });
+
+    if (!existing) {
+      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
+    }
     const nextStatus = action === "fullfill" ? "FULFILLED" : "CANCELLED";
 
     const updated = await prisma.order.update({
       where: { id: orderId },
       data: { status: nextStatus },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        orderNo: true,
+        status: true,
+        type: true,
+        total: true,
+        userId: true,
+      },
+    });
+
+    await createAdminAuditLog({
+      req,
+      action: "STATUS_CHANGE",
+      resourceType: AUDIT_RESOURCE_TYPES.ORDER,
+      resourceId: updated.id,
+      message: `Order status changed to ${updated.status}`,
+      beforeJson: existing,
+      afterJson: updated,
     });
 
     return { msg: "status updated", status: updated.status.toLowerCase() };
   } catch (err) {
-    if (err?.code === "P2025") throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
-    throw makeError("Failed to update order status", 500, "ADMIN_ORDER_STATUS_FAILED", err);
+    if (err?.code === "P2025")
+      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
+    throw makeError(
+      "Failed to update order status",
+      500,
+      "ADMIN_ORDER_STATUS_FAILED",
+      err,
+    );
   }
 }
 
-export async function refundOrder({ orderId }) {
+export async function refundOrder({ req, orderId }) {
   try {
     // NOTE: This is a stub. Integrate payment gateway refund later.
     // For now: mark as REFUNDED if currently paid/fulfilled etc.
+
+    const existing = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNo: true,
+        status: true,
+        type: true,
+        total: true,
+        userId: true,
+      },
+    });
+
+    if (!existing) {
+      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
+    }
+
     const updated = await prisma.order.update({
       where: { id: orderId },
       data: { status: "REFUNDED" },
-      select: { id: true },
+      select: {
+        id: true,
+        orderNo: true,
+        status: true,
+        type: true,
+        total: true,
+        userId: true,
+      },
     });
 
-    return { msg: "refund initiated", order_id: updated.id };
+    await createAdminAuditLog({
+      req,
+      action: "REFUND",
+      resourceType: AUDIT_RESOURCE_TYPES.ORDER,
+      resourceId: updated.id,
+      message: "Order refunded",
+      beforeJson: existing,
+      afterJson: updated,
+    });
+
+    return { msg: "refund initiated successfully", order_id: updated.id };
   } catch (err) {
-    if (err?.code === "P2025") throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
-    throw makeError("Failed to refund order", 500, "ADMIN_ORDER_REFUND_FAILED", err);
+    if (err?.code === "P2025")
+      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
+    throw makeError(
+      "Failed to refund order",
+      500,
+      "ADMIN_ORDER_REFUND_FAILED",
+      err,
+    );
   }
 }
 
-export async function deleteOrder({ orderId }) {
+export async function deleteOrder({ req, orderId }) {
   try {
+    const existing = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNo: true,
+        status: true,
+        type: true,
+        total: true,
+        userId: true,
+      },
+    });
+
+    if (!existing) {
+      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
+    }
     await prisma.order.delete({ where: { id: orderId } });
+    await createAdminAuditLog({
+      req,
+      action: "DELETE",
+      resourceType: AUDIT_RESOURCE_TYPES.ORDER,
+      resourceId: existing.id,
+      message: "Order deleted",
+      beforeJson: existing,
+      afterJson: null,
+    });
     return { msg: "deleted successfully" };
   } catch (err) {
-    if (err?.code === "P2025") throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
-    throw makeError("Failed to delete order", 500, "ADMIN_ORDER_DELETE_FAILED", err);
+    if (err?.code === "P2025")
+      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
+    throw makeError(
+      "Failed to delete order",
+      500,
+      "ADMIN_ORDER_DELETE_FAILED",
+      err,
+    );
   }
 }

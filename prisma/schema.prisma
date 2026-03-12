@@ -63,6 +63,67 @@ enum AwardType {
   AWARDED
 }
 
+enum ReviewStatus {
+  PENDING
+  ACTIVE
+  PUBLISHED
+  REJECTED
+}
+
+enum SchemeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum MediaType {
+  IMAGE
+  DOCUMENT
+  AUDIO
+  OTHER
+}
+
+enum StorageProvider {
+  LOCAL
+  S3
+  R2
+  MINIO
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  UPLOAD
+  STATUS_CHANGE
+  REFUND
+}
+
+model AdminAuditLog {
+  id String @id @default(cuid())
+
+  adminId String?
+  admin   User?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  action       AuditAction
+  resourceType String
+  resourceId   String?
+  message      String?
+
+  beforeJson Json?
+  afterJson  Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}
+
 model User {
   id       String   @id @default(cuid())
   name     String?
@@ -72,15 +133,20 @@ model User {
   role     Role     @default(USER)
   profile  Profile?
 
-  refreshTokens RefreshToken[]
-
   cart     Cart?
   wishlist Wishlist?
 
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  orders    Order[]
-  feedbacks Feedback[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens     RefreshToken[]
+  orders            Order[]
+  feedbacks         Feedback[]
+  reviews           Review[]
+  schemeEnrollments SchemeEnrollment[]
+  mediaAssets       MediaAsset[]
+
+  adminAuditLogs AdminAuditLog[]
 }
 
 model Profile {
@@ -162,6 +228,7 @@ model Book {
 
   cartItems     CartItem[]
   wishlistItems WishlistItem[]
+  reviews       Review[]
 
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
@@ -264,12 +331,20 @@ model Feedback {
   id          String  @id @default(cuid())
   title       String?
   description String
-  userId      String?
-  user        User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  email     String?
+  replyText String?
+  repliedAt DateTime?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@index([createdAt])
   @@index([userId])
+  @@index([email])
 }
 
 model Order {
@@ -401,5 +476,158 @@ model Download {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([createdAt])
+}
+
+model Catalogue {
+  id           String   @id @default(cuid())
+  title        String
+  fileUrl      String
+  fileType     String?
+  fileSize     String?
+  uploadedDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([uploadedDate])
+  @@index([createdAt])
+}
+
+model Archive {
+  id           String   @id @default(cuid())
+  title        String
+  fileUrl      String
+  fileType     String?
+  uploadedDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([uploadedDate])
+  @@index([createdAt])
+}
+
+model Bulletin {
+  id        String   @id @default(cuid())
+  title     String
+  imageUrl  String?
+  date      DateTime
+  fileUrl   String
+  fileType  String?
+  fileSize  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([createdAt])
+}
+
+model Review {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  description String
+  rating      Int
+  status      ReviewStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([rating])
+  @@index([createdAt])
+  @@index([bookId])
+  @@index([userId])
+}
+
+model Scheme {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String?
+  status      SchemeStatus @default(ACTIVE)
+
+  enrollments SchemeEnrollment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SchemeEnrollment {
+  id       String @id @default(cuid())
+  schemeId String
+  scheme   Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([schemeId, userId])
+  @@index([schemeId])
+  @@index([userId])
+}
+
+model GalleryAlbum {
+  id        String    @id @default(cuid())
+  name      String
+  galleries Gallery[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([createdAt])
+}
+
+model Gallery {
+  id      String       @id @default(cuid())
+  albumId String
+  album   GalleryAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  images GalleryImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([albumId])
+  @@index([createdAt])
+}
+
+model GalleryImage {
+  id        String  @id @default(cuid())
+  galleryId String
+  gallery   Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  imageUrl  String
+  sortOrder Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([galleryId])
+}
+
+model MediaAsset {
+  id           String          @id @default(cuid())
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  mediaType    MediaType
+  provider     StorageProvider
+  storageKey   String
+  publicUrl    String
+  module       String?
+
+  uploadedById String?
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([uploadedById])
+  @@index([module])
   @@index([createdAt])
 }

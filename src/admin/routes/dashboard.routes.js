@@ -6,12 +6,14 @@ import {
   listSlidersSchema,
   updateSliderSchema,
   deleteSliderSchema,
+  createSliderSchema,
 } from "../validators/dashboard.validator.js";
 import {
   adminDashboardController,
   adminSliderListController,
   adminSliderUpdateController,
   adminSliderDeleteController,
+  adminSliderCreateController,
 } from "../controllers/dashboard.controller.js";
 
 export const adminDashboardRouter = Router();
@@ -25,5 +27,6 @@ adminDashboardRouter.get("/", validate(adminDashboardSchema), adminDashboardCont
  * Slider APIs (Base: /api/admin/dashboard/slider)
  */
 adminDashboardRouter.get("/slider", validate(listSlidersSchema), adminSliderListController);
+adminDashboardRouter.post("/slider", validate(createSliderSchema), adminSliderCreateController);
 adminDashboardRouter.put("/slider/:id", validate(updateSliderSchema), adminSliderUpdateController);
 adminDashboardRouter.delete("/slider/:id", validate(deleteSliderSchema), adminSliderDeleteController);

@@ -71,8 +71,31 @@ export async function logoutRefreshToken(refreshToken) {
   const payload = verifyRefreshToken(refreshToken);
   const userId = payload.sub;
 
-  await prisma.refreshToken.updateMany({
-    where: { userId, tokenHash: hashToken(refreshToken), revokedAt: null },
+  const existing = await prisma.refreshToken.findFirst({
+    where: {
+      userId,
+      tokenHash: hashToken(refreshToken),
+      revokedAt: null,
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  if (!existing) {
+    const err = new Error("Invalid refresh token");
+    err.statusCode = 401;
+    err.code = "INVALID_REFRESH";
+    throw err;
+  }
+
+  await prisma.refreshToken.update({
+    where: { id: existing.id },
     data: { revokedAt: new Date() },
   });
+
+  return {
+    refreshTokenId: existing.id,
+    user: existing.user,
+  };
 }
