@@ -1,4 +1,5 @@
 // src/admin/services/me.service.js
+import { email } from "zod";
 import { prisma } from "../../config/prisma.js";
 
 function makeError(message, statusCode, code, cause) {
@@ -38,13 +39,22 @@ export async function getAdminMe(adminUserId) {
     }
 
     if (admin.role !== "ADMIN") {
-      throw makeError("Forbidden: admin access required", 403, "FORBIDDEN_ADMIN");
+      throw makeError(
+        "Forbidden: admin access required",
+        403,
+        "FORBIDDEN_ADMIN",
+      );
     }
 
     // API spec says: return { name }
-    return { name: admin.name ?? "Admin" };
+    return { name: admin.name ?? "Admin", email: admin.email ?? null };
   } catch (err) {
     if (err?.code && err?.statusCode) throw err;
-    throw makeError("Failed to fetch admin profile", 500, "ADMIN_ME_FAILED", err);
+    throw makeError(
+      "Failed to fetch admin profile",
+      500,
+      "ADMIN_ME_FAILED",
+      err,
+    );
   }
 }

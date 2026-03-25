@@ -1,5 +1,9 @@
 // src/admin/services/dashboard.service.js
 import { prisma } from "../../config/prisma.js";
+import { createAdminAuditLog } from "../../audit/audit.service.js";
+import { AUDIT_RESOURCE_TYPES } from "../../audit/audit.constants.js";
+import { deleteFileIfExists } from "../../utils/file.js";
+
 
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
@@ -98,7 +102,7 @@ export async function listSliders({ page, limit }) {
       items: items.map((s) => ({
         id: s.id,
         title: s.title ?? null,
-        slider_img_url: s.sliderImgUrl,
+        slider_img_url: `${process.env.IMAGE_BASE_CONFIG.replace("/", "")}/${s.sliderImgUrl}`,
         slider_url: s.sliderUrl ?? null,
       })),
       page,
@@ -110,47 +114,50 @@ export async function listSliders({ page, limit }) {
     throw makeError("Failed to list sliders", 500, "SLIDER_LIST_FAILED", err);
   }
 }
-export async function createSlider({ req, body }) {
-  try {
-    const created = await prisma.slider.create({
-      data: {
-        title: body.title ?? null,
-        sliderImgUrl: body.slider_img_url,
-        sliderUrl: body.slider_url ?? null,
-      },
-      select: {
-        id: true,
-        title: true,
-        sliderImgUrl: true,
-        sliderUrl: true,
-      },
-    });
-
-    const response = {
-      msg: "created successfully",
-      item: {
-        id: created.id,
-        title: created.title,
-        slider_img_url: created.sliderImgUrl,
-        slider_url: created.sliderUrl,
-      },
-    };
-
-    await createAdminAuditLog({
-      req,
-      action: "CREATE",
-      resourceType: AUDIT_RESOURCE_TYPES.SLIDER,
-      resourceId: created.id,
-      message: "Slider created",
-      beforeJson: null,
-      afterJson: response.item,
-    });
-
-    return response;
-  } catch (err) {
-    throw makeError("Failed to create slider", 500, "SLIDER_CREATE_FAILED", err);
+export async function createSlider({ req, body, file }) {
+  if (!file) {
+    throw makeError("Slider image is required", 400, "SLIDER_IMAGE_REQUIRED");
   }
+
+  const filePath = `/uploads/slider/${file.filename}`;
+
+  const created = await prisma.slider.create({
+    data: {
+      title: body.title ?? null,
+      sliderImgUrl: filePath,
+      sliderUrl: body.slider_url ?? null,
+    },
+    select: {
+      id: true,
+      title: true,
+      sliderImgUrl: true,
+      sliderUrl: true,
+    },
+  });
+
+  const response = {
+    msg: "created successfully",
+    item: {
+      id: created.id,
+      title: created.title,
+      slider_img_url: created.sliderImgUrl,
+      slider_url: created.sliderUrl,
+    },
+  };
+
+  await createAdminAuditLog({
+    req,
+    action: "CREATE",
+    resourceType: AUDIT_RESOURCE_TYPES.SLIDER,
+    resourceId: created.id,
+    message: "Slider created",
+    beforeJson: null,
+    afterJson: response.item,
+  });
+
+  return response;
 }
+
 export async function updateSlider({ req, id, body }) {
   try {
     const existing = await prisma.slider.findUnique({
@@ -169,9 +176,18 @@ export async function updateSlider({ req, id, body }) {
 
     const data = {};
 
-    if (Object.prototype.hasOwnProperty.call(body, "title")) data.title = body.title;
-    if (Object.prototype.hasOwnProperty.call(body, "slider_img_url")) data.sliderImgUrl = body.slider_img_url;
-    if (Object.prototype.hasOwnProperty.call(body, "slider_url")) data.sliderUrl = body.slider_url;
+    if (Object.prototype.hasOwnProperty.call(body, "title")) {
+      data.title = body.title;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "slider_url")) {
+      data.sliderUrl = body.slider_url;
+    }
+
+    if (body.slider_img_url) {
+      const newFilePath = `/uploads/slider/${body.slider_img_url.filename}`;
+      data.sliderImgUrl = newFilePath;
+    }
 
     const updated = await prisma.slider.update({
       where: { id },
@@ -183,6 +199,15 @@ export async function updateSlider({ req, id, body }) {
         sliderUrl: true,
       },
     });
+
+    // delete old image only if a new image was uploaded and old image exists
+    if (body.slider_img_url && existing.sliderImgUrl) {
+      try {
+        await deleteFileIfExists(existing.sliderImgUrl);
+      } catch (fileErr) {
+        console.error("Failed to delete old slider image:", fileErr);
+      }
+    }
 
     await createAdminAuditLog({
       req,
@@ -204,13 +229,28 @@ export async function updateSlider({ req, id, body }) {
       },
     });
 
-    return { msg: "edit successful" };
+    return {
+      msg: "edit successful",
+      item: {
+        id: updated.id,
+        title: updated.title,
+        slider_img_url: updated.sliderImgUrl,
+        slider_url: updated.sliderUrl,
+      },
+    };
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError("Slider not found", 404, "SLIDER_NOT_FOUND", err);
     }
+
     if (err?.code && err?.statusCode) throw err;
-    throw makeError("Failed to update slider", 500, "SLIDER_UPDATE_FAILED", err);
+
+    throw makeError(
+      "Failed to update slider",
+      500,
+      "SLIDER_UPDATE_FAILED",
+      err,
+    );
   }
 }
 export async function deleteSlider({ req, id }) {
@@ -254,6 +294,11 @@ export async function deleteSlider({ req, id }) {
       throw makeError("Slider not found", 404, "SLIDER_NOT_FOUND", err);
     }
     if (err?.code && err?.statusCode) throw err;
-    throw makeError("Failed to delete slider", 500, "SLIDER_DELETE_FAILED", err);
+    throw makeError(
+      "Failed to delete slider",
+      500,
+      "SLIDER_DELETE_FAILED",
+      err,
+    );
   }
 }

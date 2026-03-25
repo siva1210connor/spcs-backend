@@ -16,7 +16,7 @@ apiRouter.use("/admin", requireAuth, requireAdmin, adminRouter);
 
 
 apiRouter.use("/health", healthRouter);
-apiRouter.use("/user/auth", authRouter);
+apiRouter.use("/auth", authRouter);
 
 apiRouter.use("/categories", categoriesRouter);
 apiRouter.use("/books", booksRouter);

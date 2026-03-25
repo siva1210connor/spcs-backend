@@ -20,19 +20,30 @@ export const adminSliderListController = asyncHandler(async (req, res) => {
   return ok(res, data, "Sliders fetched");
 });
 export const adminSliderCreateController = asyncHandler(async (req, res) => {
-  const data = await createSlider({ req,body: req.validated.body });
+  const data = await createSlider({
+    req,
+    body: req.validated.body,
+    file: req.file,
+  });
+
   return ok(res, data, data.msg);
 });
 
 export const adminSliderUpdateController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const body = req.validated.body;
-  const data = await updateSlider({ req,id, body:req.validated.body });
+
+  const body = {
+    ...req.validated.body,
+    slider_img_url: req.file || undefined,
+  };
+
+  const data = await updateSlider({ req, id, body });
+
   return ok(res, data, data.msg);
 });
 
 export const adminSliderDeleteController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await deleteSlider({ req,id });
+  const data = await deleteSlider({ req, id });
   return ok(res, data, data.msg);
 });

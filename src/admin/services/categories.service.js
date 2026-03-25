@@ -11,12 +11,16 @@ function makeError(message, statusCode, code, cause) {
   return err;
 }
 
+function isAppError(err) {
+  return Boolean(err?.statusCode && err?.code);
+}
+
 export async function adminListCategories({ query }) {
   try {
-    const page = query?.page ?? 1;
-    const limit = query?.limit ?? 50;
+    const page = Number(query?.page ?? 1);
+    const limit = Number(query?.limit ?? 50);
     const skip = (page - 1) * limit;
-    const search = query?.search;
+    const search = query?.search?.trim();
 
     const where = search
       ? { name: { contains: search, mode: "insensitive" } }
@@ -38,9 +42,11 @@ export async function adminListCategories({ query }) {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     };
   } catch (err) {
+    if (isAppError(err)) throw err;
+
     throw makeError(
       "Failed to list categories",
       500,
@@ -52,21 +58,32 @@ export async function adminListCategories({ query }) {
 
 export async function adminCreateCategory({ req, name }) {
   try {
-    await createAdminAuditLog({
-      req,
-      action: "CREATE",
-      resourceType: AUDIT_RESOURCE_TYPES.CATEGORY,
-      resourceId: created.id,
-      message: "Category created",
-      beforeJson: null,
-      afterJson: created,
-    });
+    const normalizedName = name.trim();
+
     const created = await prisma.category.create({
-      data: { name },
-      select: { id: true, name: true },
+      data: { name: normalizedName },
+      select: { id: true, name: true, createdAt: true },
     });
+
+    // Keep main operation successful even if audit log fails
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "CREATE",
+        resourceType: AUDIT_RESOURCE_TYPES.CATEGORY,
+        resourceId: created.id,
+        message: "Category created",
+        beforeJson: null,
+        afterJson: created,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on category create:", auditErr);
+    }
+
     return created;
   } catch (err) {
+    if (isAppError(err)) throw err;
+
     if (err?.code === "P2002") {
       throw makeError(
         "Category already exists",
@@ -75,6 +92,7 @@ export async function adminCreateCategory({ req, name }) {
         err,
       );
     }
+
     throw makeError(
       "Failed to create category",
       500,
@@ -86,33 +104,45 @@ export async function adminCreateCategory({ req, name }) {
 
 export async function adminUpdateCategory({ req, categoryId, name }) {
   try {
+    const normalizedName = name.trim();
+
     const existing = await prisma.category.findUnique({
       where: { id: categoryId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, createdAt: true },
     });
 
     if (!existing) {
       throw makeError("Category not found", 404, "CATEGORY_NOT_FOUND");
     }
+
     const updated = await prisma.category.update({
       where: { id: categoryId },
-      data: { name },
-      select: { id: true, name: true },
+      data: { name: normalizedName },
+      select: { id: true, name: true, createdAt: true },
     });
-    await createAdminAuditLog({
-      req,
-      action: "UPDATE",
-      resourceType: AUDIT_RESOURCE_TYPES.CATEGORY,
-      resourceId: updated.id,
-      message: "Category updated",
-      beforeJson: existing,
-      afterJson: updated,
-    });
+
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "UPDATE",
+        resourceType: AUDIT_RESOURCE_TYPES.CATEGORY,
+        resourceId: updated.id,
+        message: "Category updated",
+        beforeJson: existing,
+        afterJson: updated,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on category update:", auditErr);
+    }
+
     return updated;
   } catch (err) {
+    if (isAppError(err)) throw err;
+
     if (err?.code === "P2025") {
       throw makeError("Category not found", 404, "CATEGORY_NOT_FOUND", err);
     }
+
     if (err?.code === "P2002") {
       throw makeError(
         "Category name already exists",
@@ -121,6 +151,7 @@ export async function adminUpdateCategory({ req, categoryId, name }) {
         err,
       );
     }
+
     throw makeError(
       "Failed to update category",
       500,
@@ -132,18 +163,19 @@ export async function adminUpdateCategory({ req, categoryId, name }) {
 
 export async function adminDeleteCategory({ req, categoryId }) {
   try {
-    // Context: deleting a category with books may fail due to FK constraints.
-    // We can either block deletion or allow deletion by moving books to a default category.
-    // For now: block deletion and return clear error.
     const existing = await prisma.category.findUnique({
       where: { id: categoryId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, createdAt: true },
     });
 
     if (!existing) {
       throw makeError("Category not found", 404, "CATEGORY_NOT_FOUND");
     }
-    const bookCount = await prisma.book.count({ where: { categoryId } });
+
+    const bookCount = await prisma.book.count({
+      where: { categoryId },
+    });
+
     if (bookCount > 0) {
       throw makeError(
         "Cannot delete category with existing books",
@@ -152,22 +184,32 @@ export async function adminDeleteCategory({ req, categoryId }) {
       );
     }
 
-    await prisma.category.delete({ where: { id: categoryId } });
-    await createAdminAuditLog({
-      req,
-      action: "DELETE",
-      resourceType: AUDIT_RESOURCE_TYPES.CATEGORY,
-      resourceId: existing.id,
-      message: "Category deleted",
-      beforeJson: existing,
-      afterJson: null,
+    await prisma.category.delete({
+      where: { id: categoryId },
     });
-    return { msg: "deleted successfully" };
+
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "DELETE",
+        resourceType: AUDIT_RESOURCE_TYPES.CATEGORY,
+        resourceId: existing.id,
+        message: "Category deleted",
+        beforeJson: existing,
+        afterJson: null,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on category delete:", auditErr);
+    }
+
+    return { msg: "Deleted successfully" };
   } catch (err) {
-    if (err?.code === "CATEGORY_HAS_BOOKS") throw err;
+    if (isAppError(err)) throw err;
+
     if (err?.code === "P2025") {
       throw makeError("Category not found", 404, "CATEGORY_NOT_FOUND", err);
     }
+
     throw makeError(
       "Failed to delete category",
       500,

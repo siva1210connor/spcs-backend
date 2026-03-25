@@ -19,7 +19,6 @@ import { adminFeedbackRouter } from "./feedback.routes.js";
 import { adminReviewsRouter } from "./reviews.routes.js";
 import { adminSchemeRouter } from "./scheme.routes.js";
 import { adminGalleryRouter } from "./gallery.routes.js";
-import { adminUploadRouter } from "../../upload/index.js";
 import { adminAuditLogsRouter } from "./audit-logs.routes.js";
 
 export const adminRouter = Router();
@@ -43,5 +42,4 @@ adminRouter.use("/feedback", adminFeedbackRouter);
 adminRouter.use("/reviews", adminReviewsRouter);
 adminRouter.use("/scheme", adminSchemeRouter);
 adminRouter.use("/gallery", adminGalleryRouter);
-adminRouter.use("/uploads", adminUploadRouter);
 adminRouter.use("/audit-logs", adminAuditLogsRouter);
