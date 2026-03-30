@@ -12,14 +12,12 @@ export const adminListCatalogueSchema = z.object({
 
 export const adminCreateCatalogueSchema = z.object({
   body: z.object({
-    title: z.string().min(1, "title is required").max(250),
-    file_url: z.string().url("file_url must be a valid URL"),
-    file_type: nullableString(100),
-    file_size: nullableString(100),
-    uploaded_date: z
-      .string()
-      .optional()
-      .refine((v) => !v || !Number.isNaN(new Date(v).getTime()), "uploaded_date must be a valid date"),
+    title: z.string().trim().min(1, "title is required").max(250),
+    year: z.coerce
+      .number()
+      .int()
+      .min(1900, "invalid year")
+      .max(3000, "invalid year"),
   }),
 });
 
@@ -29,18 +27,16 @@ export const adminUpdateCatalogueSchema = z.object({
   }),
   body: z
     .object({
-      title: z.string().min(1).max(250).optional(),
-      file_url: z.string().url("file_url must be a valid URL").optional(),
-      file_type: nullableString(100),
-      file_size: nullableString(100),
-      uploaded_date: z
-        .string()
-        .optional()
-        .refine((v) => !v || !Number.isNaN(new Date(v).getTime()), "uploaded_date must be a valid date"),
+      title: z.string().trim().min(1).max(250).optional(),
+      year: z.coerce
+        .number()
+        .int()
+        .min(1900, "invalid year")
+        .max(3000, "invalid year")
+        .optional(),
     })
-    .refine((body) => Object.keys(body).length > 0, {
-      message: "At least one field must be provided",
-    }),
+    .optional()
+    .default({}),
 });
 
 export const adminDeleteCatalogueSchema = z.object({

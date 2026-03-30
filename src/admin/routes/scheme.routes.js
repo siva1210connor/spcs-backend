@@ -15,12 +15,22 @@ import {
 } from "../controllers/scheme.controller.js";
 
 export const adminSchemeRouter = Router();
-
+import { schemeUpload } from "../../middleware/upload.js";
 /**
  * Base: {{base_url}}/admin/scheme
  */
 
 adminSchemeRouter.get("/", validate(adminListSchemeSchema), adminSchemeListController);
-adminSchemeRouter.post("/", validate(adminCreateSchemeSchema), adminSchemeCreateController);
-adminSchemeRouter.put("/:id", validate(adminUpdateSchemeSchema), adminSchemeUpdateController);
+adminSchemeRouter.post(
+  "/",
+  schemeUpload.single("scheme_image"),
+  validate(adminCreateSchemeSchema),
+  adminSchemeCreateController
+);
+adminSchemeRouter.put(
+  "/:id",
+  schemeUpload.single("scheme_image"),
+  validate(adminUpdateSchemeSchema),
+  adminSchemeUpdateController
+);
 adminSchemeRouter.delete("/:id", validate(adminDeleteSchemeSchema), adminSchemeDeleteController);

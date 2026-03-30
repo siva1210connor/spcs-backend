@@ -26,7 +26,7 @@ export const adminListFeedbackSchema = z.object({
     to_date: dateDDMMYYYY,
     page: paginationSchema.shape.page,
     limit: paginationSchema.shape.limit,
-  }),
+  }).default({}),
 });
 
 export const adminReplyFeedbackSchema = z.object({
@@ -34,7 +34,7 @@ export const adminReplyFeedbackSchema = z.object({
     id: z.string().min(1, "id is required"),
   }),
   body: z.object({
-    message: z.string().min(1, "message is required").max(5000),
+    message: z.string().trim().min(1, "message is required").max(5000),
   }),
 });
 

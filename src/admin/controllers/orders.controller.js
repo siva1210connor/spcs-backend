@@ -45,7 +45,13 @@ export const adminOrderDetailController = asyncHandler(async (req, res) => {
  */
 export const adminToggleStatusController = asyncHandler(async (req, res) => {
   const { order_id, status } = req.validated.body;
-  const data = await toggleOrderStatus({ req,orderId: order_id, action: status });
+
+  const data = await toggleOrderStatus({
+    req,
+    orderId: order_id,
+    action: status,
+  });
+
   return ok(res, data, data.msg);
 });
 

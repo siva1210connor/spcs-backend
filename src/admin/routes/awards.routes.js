@@ -8,19 +8,33 @@ import {
   adminDeleteAwardSchema,
 } from "../validators/awards.validator.js";
 import {
-  adminListAwards,
-  adminCreateAward,
-  adminUpdateAward,
-  adminDeleteAward
+  adminListAwardsController,
+  adminCreateAwardController,
+  adminUpdateAwardController,
+  adminDeleteAwardController
 } from "../controllers/awards.controller.js";
-
+import { awardUpload } from "../../middleware/upload.js";
 export const adminAwardsRouter = Router();
 
 /**
  * Base: {{base_url}}/admin/awards
  */
 
-adminAwardsRouter.get("/", validate(adminListAwardsSchema), adminListAwards);
-adminAwardsRouter.post("/", validate(adminCreateAwardSchema), adminCreateAward);
-adminAwardsRouter.put("/:id", validate(adminUpdateAwardSchema), adminUpdateAward);
-adminAwardsRouter.delete("/:id", validate(adminDeleteAwardSchema), adminDeleteAward);
+adminAwardsRouter.get("/", validate(adminListAwardsSchema), adminListAwardsController);
+adminAwardsRouter.post(
+  "/",
+  awardUpload.single("image"),
+  validate(adminCreateAwardSchema),
+  adminCreateAwardController
+);
+adminAwardsRouter.put(
+  "/:id",
+  awardUpload.single("image"),
+  validate(adminUpdateAwardSchema),
+  adminUpdateAwardController
+);
+adminAwardsRouter.delete(
+  "/:id",
+  validate(adminDeleteAwardSchema),
+  adminDeleteAwardController
+);

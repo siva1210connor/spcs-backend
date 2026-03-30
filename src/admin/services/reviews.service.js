@@ -12,10 +12,17 @@ function makeError(message, statusCode, code, cause) {
 }
 
 function mapReviewStatusToDb(filter) {
-  if (!filter || filter === "all") return null;
-  return filter.toUpperCase();
+  switch (filter) {
+    case "pending_active":
+      return { in: ["PENDING", "ACTIVE"] };
+    case "published":
+      return "PUBLISHED";
+    case "rejected":
+      return "REJECTED";
+    default:
+      return null;
+  }
 }
-
 function mapReviewRow(row) {
   return {
     id: row.id,
@@ -27,7 +34,7 @@ function mapReviewRow(row) {
     description: row.description,
     rating: row.rating,
     status: row.status.toLowerCase(),
-    user_name: row.user?.name ?? null,
+    user_name: row.user?.name ?? "Unknown User",
   };
 }
 
@@ -41,8 +48,16 @@ function buildWhere({ filter, search, rating }) {
 
   if (search) {
     where.OR = [
-      { book: { name: { contains: search, mode: "insensitive" } } },
-      { user: { name: { contains: search, mode: "insensitive" } } },
+      {
+        book: {
+          name: { contains: search, mode: "insensitive" },
+        },
+      },
+      {
+        user: {
+          name: { contains: search, mode: "insensitive" },
+        },
+      },
     ];
   }
 
@@ -90,7 +105,7 @@ export async function adminListReviews({ query }) {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.max(1, Math.ceil(total / limit)),
     };
   } catch (err) {
     throw makeError(
@@ -104,6 +119,8 @@ export async function adminListReviews({ query }) {
 
 export async function adminUpdateReview({ req, id, status }) {
   try {
+    const nextStatus = status.toUpperCase();
+
     const existing = await prisma.review.findUnique({
       where: { id },
       select: {
@@ -112,18 +129,28 @@ export async function adminUpdateReview({ req, id, status }) {
         rating: true,
         status: true,
         createdAt: true,
-        userId: true,
-        bookId: true,
+        book: {
+          select: {
+            name: true,
+            coverImageUrl: true,
+          },
+        },
+        user: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
 
     if (!existing) {
       throw makeError("Review not found", 404, "ADMIN_REVIEW_NOT_FOUND");
     }
+
     const updated = await prisma.review.update({
       where: { id },
       data: {
-        status: status.toUpperCase(),
+        status: nextStatus,
       },
       select: {
         id: true,
@@ -146,23 +173,26 @@ export async function adminUpdateReview({ req, id, status }) {
     });
 
     const response = {
-      msg: "updated successfully",
+      msg: "Review updated successfully",
       item: mapReviewRow(updated),
     };
+
     await createAdminAuditLog({
       req,
       action: "STATUS_CHANGE",
       resourceType: AUDIT_RESOURCE_TYPES.REVIEW,
       resourceId: updated.id,
       message: `Review status changed to ${updated.status}`,
-      beforeJson: existing,
+      beforeJson: mapReviewRow(existing),
       afterJson: response.item,
     });
+
     return response;
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError("Review not found", 404, "ADMIN_REVIEW_NOT_FOUND", err);
     }
+
     throw makeError(
       "Failed to update review",
       500,
@@ -182,14 +212,24 @@ export async function adminDeleteReview({ req, id }) {
         rating: true,
         status: true,
         createdAt: true,
-        userId: true,
-        bookId: true,
+        book: {
+          select: {
+            name: true,
+            coverImageUrl: true,
+          },
+        },
+        user: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
 
     if (!existing) {
       throw makeError("Review not found", 404, "ADMIN_REVIEW_NOT_FOUND");
     }
+
     await prisma.review.delete({
       where: { id },
     });
@@ -200,14 +240,20 @@ export async function adminDeleteReview({ req, id }) {
       resourceType: AUDIT_RESOURCE_TYPES.REVIEW,
       resourceId: existing.id,
       message: "Review deleted",
-      beforeJson: existing,
+      beforeJson: mapReviewRow(existing),
       afterJson: null,
     });
-    return { msg: "deleted successfully" };
+
+    return { msg: "Review deleted successfully" };
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError("Review not found", 404, "ADMIN_REVIEW_NOT_FOUND", err);
     }
+
+    if (err?.statusCode || err?.status) {
+      throw err;
+    }
+
     throw makeError(
       "Failed to delete review",
       500,

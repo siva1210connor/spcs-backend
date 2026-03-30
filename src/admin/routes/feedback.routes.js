@@ -19,5 +19,13 @@ export const adminFeedbackRouter = Router();
  */
 
 adminFeedbackRouter.get("/", validate(adminListFeedbackSchema), adminFeedbackListController);
-adminFeedbackRouter.post("/reply/:id", validate(adminReplyFeedbackSchema), adminFeedbackReplyController);
-adminFeedbackRouter.delete("/:id", validate(adminDeleteFeedbackSchema), adminFeedbackDeleteController);
+adminFeedbackRouter.post(
+  "/reply/:id",
+  validate(adminReplyFeedbackSchema),
+  adminFeedbackReplyController
+);
+adminFeedbackRouter.delete(
+  "/:id",
+  validate(adminDeleteFeedbackSchema),
+  adminFeedbackDeleteController
+);

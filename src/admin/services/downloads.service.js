@@ -1,7 +1,35 @@
 // src/admin/services/downloads.service.js
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
 import { prisma } from "../../config/prisma.js";
 import { createAdminAuditLog } from "../../audit/audit.service.js";
 import { AUDIT_RESOURCE_TYPES } from "../../audit/audit.constants.js";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../../");
+
+async function deleteLocalUploadIfExists(fileUrl) {
+  if (!fileUrl) return;
+
+  // Only delete local uploads, not external URLs
+  if (!fileUrl.startsWith("/uploads/")) return;
+
+  const relativePath = fileUrl.replace(/^\/+/, "");
+  const absolutePath = path.join(projectRoot, relativePath);
+
+  try {
+    await fs.unlink(absolutePath);
+  } catch (err) {
+    if (err?.code === "ENOENT") return;
+    throw makeError(
+      "Download deleted, but failed to remove file from storage",
+      500,
+      "ADMIN_DOWNLOAD_FILE_DELETE_FAILED",
+      err,
+    );
+  }
+}
 
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
@@ -11,39 +39,86 @@ function makeError(message, statusCode, code, cause) {
   return err;
 }
 
+function getFileTypeFromUpload(file) {
+  const ext = file.originalname?.split(".").pop()?.trim().toUpperCase();
+
+  if (ext) return ext;
+
+  if (file.mimetype === "application/pdf") return "PDF";
+  if (file.mimetype === "application/msword") return "DOC";
+  if (
+    file.mimetype ===
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return "DOCX";
+  }
+  if (file.mimetype === "application/vnd.ms-excel") return "XLS";
+  if (
+    file.mimetype ===
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  ) {
+    return "XLSX";
+  }
+
+  return null;
+}
+
+function formatFileSize(bytes) {
+  if (bytes == null || Number.isNaN(bytes)) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileType(row) {
+  if (row.fileType?.trim()) return row.fileType.trim().toUpperCase();
+
+  const ext = row.fileUrl?.split(".").pop()?.split("?")[0]?.trim()?.toUpperCase();
+  return ext || null;
+}
 function mapDownloadRow(row) {
   return {
     id: row.id,
     title: row.title,
     file_url: row.fileUrl,
-    file_type: row.fileType ?? null,
+    file_type: getFileType(row),
     file_size: row.fileSize ?? null,
-    date: row.createdAt,
+    uploaded_at: row.createdAt,
   };
 }
-
 export async function adminListDownloads({ query } = {}) {
   try {
-    const where = query?.search
+    const search = query?.search?.trim();
+
+    const where = search
       ? {
-          title: { contains: query.search, mode: "insensitive" },
-        }
+        title: {
+          contains: search,
+          mode: "insensitive",
+        },
+      }
       : {};
 
-    const rows = await prisma.download.findMany({
-      where,
-      orderBy: [{ createdAt: "desc" }],
-      select: {
-        id: true,
-        title: true,
-        fileUrl: true,
-        fileType: true,
-        fileSize: true,
-        createdAt: true,
-      },
-    });
+    const [total, rows] = await Promise.all([
+      prisma.download.count({ where }),
+      prisma.download.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          id: true,
+          title: true,
+          fileUrl: true,
+          fileType: true,
+          fileSize: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
-    return rows.map(mapDownloadRow);
+    return {
+      total,
+      items: rows.map(mapDownloadRow),
+    };
   } catch (err) {
     throw makeError(
       "Failed to fetch downloads",
@@ -53,15 +128,22 @@ export async function adminListDownloads({ query } = {}) {
     );
   }
 }
-
 export async function adminCreateDownload(req, input) {
   try {
+    if (!req.file) {
+      throw makeError("File is required", 400, "DOWNLOAD_FILE_REQUIRED");
+    }
+
+    const fileUrl = `/uploads/downloads/${req.file.filename}`;
+    const fileType = getFileTypeFromUpload(req.file);
+    const fileSize = formatFileSize(req.file.size);
+
     const created = await prisma.download.create({
       data: {
-        title: input.title,
-        fileUrl: input.file_url,
-        fileType: input.file_type ?? null,
-        fileSize: input.file_size ?? null,
+        title: input.title.trim(),
+        fileUrl,
+        fileType,
+        fileSize,
       },
       select: {
         id: true,
@@ -73,10 +155,13 @@ export async function adminCreateDownload(req, input) {
       },
     });
 
+    const item = mapDownloadRow(created);
+
     const response = {
-      msg: "created successfully",
-      item: mapDownloadRow(created),
+      msg: "Download created successfully",
+      item,
     };
+
     await createAdminAuditLog({
       req,
       action: "CREATE",
@@ -84,8 +169,9 @@ export async function adminCreateDownload(req, input) {
       resourceId: created.id,
       message: "Download created",
       beforeJson: null,
-      afterJson: response.item,
+      afterJson: item,
     });
+
     return response;
   } catch (err) {
     throw makeError(
@@ -114,14 +200,26 @@ export async function adminUpdateDownload({ req, id, input }) {
     if (!existing) {
       throw makeError("Download not found", 404, "ADMIN_DOWNLOAD_NOT_FOUND");
     }
+
+    if (input.title === undefined && !req.file) {
+      throw makeError(
+        "At least one field must be provided",
+        400,
+        "ADMIN_DOWNLOAD_UPDATE_EMPTY"
+      );
+    }
+
     const data = {};
 
-    if (input.title !== undefined) data.title = input.title;
-    if (input.file_url !== undefined) data.fileUrl = input.file_url;
-    if (Object.prototype.hasOwnProperty.call(input, "file_type"))
-      data.fileType = input.file_type;
-    if (Object.prototype.hasOwnProperty.call(input, "file_size"))
-      data.fileSize = input.file_size;
+    if (input.title !== undefined) {
+      data.title = input.title.trim();
+    }
+
+    if (req.file) {
+      data.fileUrl = `/uploads/downloads/${req.file.filename}`;
+      data.fileType = getFileTypeFromUpload(req.file);
+      data.fileSize = formatFileSize(req.file.size);
+    }
 
     const updated = await prisma.download.update({
       where: { id },
@@ -137,9 +235,10 @@ export async function adminUpdateDownload({ req, id, input }) {
     });
 
     const response = {
-      msg: "updated successfully",
+      msg: "Download updated successfully",
       item: mapDownloadRow(updated),
     };
+
     await createAdminAuditLog({
       req,
       action: "UPDATE",
@@ -149,6 +248,7 @@ export async function adminUpdateDownload({ req, id, input }) {
       beforeJson: mapDownloadRow(existing),
       afterJson: response.item,
     });
+
     return response;
   } catch (err) {
     if (err?.code === "P2025") {
@@ -156,18 +256,22 @@ export async function adminUpdateDownload({ req, id, input }) {
         "Download not found",
         404,
         "ADMIN_DOWNLOAD_NOT_FOUND",
-        err,
+        err
       );
     }
+
+    if (err?.statusCode || err?.status) {
+      throw err;
+    }
+
     throw makeError(
       "Failed to update download",
       500,
       "ADMIN_DOWNLOAD_UPDATE_FAILED",
-      err,
+      err
     );
   }
 }
-
 export async function adminDeleteDownload({ req, id }) {
   try {
     const existing = await prisma.download.findUnique({
@@ -185,9 +289,13 @@ export async function adminDeleteDownload({ req, id }) {
     if (!existing) {
       throw makeError("Download not found", 404, "ADMIN_DOWNLOAD_NOT_FOUND");
     }
+
     await prisma.download.delete({
       where: { id },
     });
+
+    await deleteLocalUploadIfExists(existing.fileUrl);
+
     await createAdminAuditLog({
       req,
       action: "DELETE",
@@ -198,7 +306,7 @@ export async function adminDeleteDownload({ req, id }) {
       afterJson: null,
     });
 
-    return { msg: "deleted successfully" };
+    return { msg: "Download deleted successfully" };
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError(
@@ -208,6 +316,11 @@ export async function adminDeleteDownload({ req, id }) {
         err,
       );
     }
+
+    if (err?.statusCode || err?.status) {
+      throw err;
+    }
+
     throw makeError(
       "Failed to delete download",
       500,

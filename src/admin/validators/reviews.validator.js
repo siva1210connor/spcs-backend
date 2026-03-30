@@ -19,8 +19,8 @@ const reviewFilterSchema = z
   .optional()
   .transform((v) => v ?? "all")
   .refine(
-    (v) => ["all", "pending", "active", "published", "rejected"].includes(v),
-    "filter must be one of all | pending | active | published | rejected"
+    (v) => ["all", "pending_active", "published", "rejected"].includes(v),
+    "filter must be one of all | pending_active | published | rejected"
   );
 
 export const adminListReviewsSchema = z.object({
@@ -31,10 +31,13 @@ export const adminListReviewsSchema = z.object({
       .string()
       .optional()
       .transform((v) => (v ? Number(v) : undefined))
-      .refine((v) => v === undefined || (Number.isInteger(v) && v >= 1 && v <= 5), "rating must be 1..5"),
+      .refine(
+        (v) => v === undefined || (Number.isInteger(v) && v >= 1 && v <= 5),
+        "rating must be 1..5"
+      ),
     page: paginationSchema.shape.page,
     limit: paginationSchema.shape.limit,
-  }),
+  }).default({}),
 });
 
 export const adminUpdateReviewSchema = z.object({

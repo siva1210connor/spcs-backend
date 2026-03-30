@@ -25,12 +25,11 @@ export const adminListEventsSchema = z.object({
 export const adminCreateEventSchema = z.object({
   body: z.object({
     type: adminEventTypeSchema,
-    title: z.string().min(1, "title is required").max(250),
+    title: z.string().trim().min(1, "title is required").max(250),
     date: dateStringSchema,
     time: nullableString(50),
+    location: nullableString(250),
     description: nullableString(5000),
-    image: nullableUrl(),
-    file_link: nullableUrl(),
   }),
 });
 
@@ -38,19 +37,14 @@ export const adminUpdateEventSchema = z.object({
   params: z.object({
     id: z.string().min(1, "id is required"),
   }),
-  body: z
-    .object({
-      type: adminEventTypeSchema.optional(),
-      title: z.string().min(1).max(250).optional(),
-      date: dateStringSchema.optional(),
-      time: nullableString(50),
-      description: nullableString(5000),
-      image: nullableUrl(),
-      file_link: nullableUrl(),
-    })
-    .refine((body) => Object.keys(body).length > 0, {
-      message: "At least one field must be provided",
-    }),
+  body: z.object({
+    type: adminEventTypeSchema.optional(),
+    title: z.string().trim().min(1).max(250).optional(),
+    date: dateStringSchema.optional(),
+    time: nullableString(50),
+    location: nullableString(250),
+    description: nullableString(5000),
+  }),
 });
 
 export const adminDeleteEventSchema = z.object({

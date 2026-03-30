@@ -45,7 +45,7 @@ function buildWhere({ type, filter, query, from_date, to_date }) {
     where.OR = [
       { id: { contains: query, mode: "insensitive" } },
       { orderNo: { contains: query, mode: "insensitive" } },
-      { user: { name: { contains: query, mode: "insensitive" } } },
+      { user: { is: { name: { contains: query, mode: "insensitive" } } } },
     ];
   }
 
@@ -150,7 +150,7 @@ export async function getOrderDetail({ type, orderId }) {
 
     return {
       order_id: order.orderNo ?? order.id,
-      transation_id: order.transactionId ?? null,
+      transaction_id: order.transactionId ?? null,
       order_date: order.createdAt,
       status: order.status.toLowerCase(),
 
@@ -158,7 +158,7 @@ export async function getOrderDetail({ type, orderId }) {
         subtotal: order.subtotal,
         discount: discountPrice,
         shipping_charge: order.shippingCharge,
-        sub_total: order.total,
+        total: order.total,
       },
 
       order_items: order.items.map((i) => ({
@@ -209,7 +209,8 @@ export async function toggleOrderStatus({ req, orderId, action }) {
     if (!existing) {
       throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
     }
-    const nextStatus = action === "fullfill" ? "FULFILLED" : "CANCELLED";
+
+    const nextStatus = action === "fulfill" ? "FULFILLED" : "CANCELLED";
 
     const updated = await prisma.order.update({
       where: { id: orderId },
@@ -234,14 +235,19 @@ export async function toggleOrderStatus({ req, orderId, action }) {
       afterJson: updated,
     });
 
-    return { msg: "status updated", status: updated.status.toLowerCase() };
+    return {
+      msg: "status updated",
+      status: updated.status.toLowerCase(),
+    };
   } catch (err) {
-    if (err?.code === "P2025")
+    if (err?.code === "P2025") {
       throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
+    }
+
     throw makeError(
-      "Failed to update order status",
-      500,
-      "ADMIN_ORDER_STATUS_FAILED",
+      err?.message || "Failed to update order status",
+      err?.statusCode || 500,
+      err?.code || "ADMIN_ORDER_STATUS_FAILED",
       err,
     );
   }
@@ -249,11 +255,10 @@ export async function toggleOrderStatus({ req, orderId, action }) {
 
 export async function refundOrder({ req, orderId }) {
   try {
-    // NOTE: This is a stub. Integrate payment gateway refund later.
-    // For now: mark as REFUNDED if currently paid/fulfilled etc.
-
-    const existing = await prisma.order.findUnique({
-      where: { id: orderId },
+    const existing = await prisma.order.findFirst({
+      where: {
+        OR: [{ id: orderId }, { orderNo: orderId }],
+      },
       select: {
         id: true,
         orderNo: true,
@@ -268,8 +273,16 @@ export async function refundOrder({ req, orderId }) {
       throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
     }
 
+    if (existing.status === "REFUNDED") {
+      throw makeError(
+        "Order already refunded",
+        400,
+        "ADMIN_ORDER_ALREADY_REFUNDED"
+      );
+    }
+
     const updated = await prisma.order.update({
-      where: { id: orderId },
+      where: { id: existing.id },
       data: { status: "REFUNDED" },
       select: {
         id: true,
@@ -291,10 +304,13 @@ export async function refundOrder({ req, orderId }) {
       afterJson: updated,
     });
 
-    return { msg: "refund initiated successfully", order_id: updated.id };
+    return {
+      msg: "refund initiated successfully",
+      order_id: updated.orderNo ?? updated.id,
+    };
   } catch (err) {
-    if (err?.code === "P2025")
-      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
+    if (err?.code && err?.statusCode) throw err;
+
     throw makeError(
       "Failed to refund order",
       500,
@@ -306,8 +322,10 @@ export async function refundOrder({ req, orderId }) {
 
 export async function deleteOrder({ req, orderId }) {
   try {
-    const existing = await prisma.order.findUnique({
-      where: { id: orderId },
+    const existing = await prisma.order.findFirst({
+      where: {
+        OR: [{ id: orderId }, { orderNo: orderId }],
+      },
       select: {
         id: true,
         orderNo: true,
@@ -321,7 +339,11 @@ export async function deleteOrder({ req, orderId }) {
     if (!existing) {
       throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND");
     }
-    await prisma.order.delete({ where: { id: orderId } });
+
+    await prisma.order.delete({
+      where: { id: existing.id },
+    });
+
     await createAdminAuditLog({
       req,
       action: "DELETE",
@@ -331,10 +353,14 @@ export async function deleteOrder({ req, orderId }) {
       beforeJson: existing,
       afterJson: null,
     });
-    return { msg: "deleted successfully" };
+
+    return {
+      msg: "deleted successfully",
+      order_id: existing.orderNo ?? existing.id,
+    };
   } catch (err) {
-    if (err?.code === "P2025")
-      throw makeError("Order not found", 404, "ADMIN_ORDER_NOT_FOUND", err);
+    if (err?.code && err?.statusCode) throw err;
+
     throw makeError(
       "Failed to delete order",
       500,

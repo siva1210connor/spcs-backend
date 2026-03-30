@@ -26,6 +26,6 @@ export const adminAdsUpdateController = asyncHandler(async (req, res) => {
 
 export const adminAdsDeleteController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await adminDeleteAd({ res, id });
+  const data = await adminDeleteAd({ req, id });
   return ok(res, data, data.msg);
 });

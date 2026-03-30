@@ -35,6 +35,7 @@ const statusFilter = z
     "filter invalid"
   );
 
+// Orders schema
 export const listOrdersSchema = sectionSchema.extend({
   query: z.object({
     filter: statusFilter,
@@ -55,10 +56,12 @@ export const getOrderDetailSchema = sectionSchema.extend({
 export const toggleOrderStatusSchema = z.object({
   body: z.object({
     order_id: z.string().min(1, "order_id required"),
-    status: z
-      .string()
-      .transform((v) => v.toLowerCase())
-      .refine((v) => ["fullfill", "cancel"].includes(v), "status must be fullfill | cancel"),
+    status: z.preprocess(
+      (v) => (typeof v === "string" ? v.toLowerCase().trim() : v),
+      z.enum(["fulfill", "cancel"], {
+        errorMap: () => ({ message: "status must be fulfill | cancel" }),
+      })
+    ),
   }),
 });
 

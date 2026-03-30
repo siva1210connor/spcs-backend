@@ -14,6 +14,7 @@ import {
   adminCatalogueDeleteController,
 } from "../controllers/catalogue.controller.js";
 
+import { catalogueUpload } from "../../middleware/upload.js"
 export const adminCatalogueRouter = Router();
 
 /**
@@ -21,6 +22,16 @@ export const adminCatalogueRouter = Router();
  */
 
 adminCatalogueRouter.get("/", validate(adminListCatalogueSchema), adminCatalogueListController);
-adminCatalogueRouter.post("/", validate(adminCreateCatalogueSchema), adminCatalogueCreateController);
-adminCatalogueRouter.put("/:id", validate(adminUpdateCatalogueSchema), adminCatalogueUpdateController);
+adminCatalogueRouter.post(
+  "/",
+  catalogueUpload.single("catalog_pdf"),
+  validate(adminCreateCatalogueSchema),
+  adminCatalogueCreateController
+);
+adminCatalogueRouter.put(
+  "/:id",
+  catalogueUpload.single("catalog_pdf"),
+  validate(adminUpdateCatalogueSchema),
+  adminCatalogueUpdateController
+);
 adminCatalogueRouter.delete("/:id", validate(adminDeleteCatalogueSchema), adminCatalogueDeleteController);

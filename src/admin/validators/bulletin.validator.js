@@ -6,25 +6,30 @@ const nullableString = (max = 500) =>
 
 const nullableUrl = () =>
   z.string().url("must be a valid URL").nullable().optional();
-
+const paginationSchema = z.object({
+  page: z.coerce.number().int().min(1),
+  limit: z.coerce.number().int().min(1).max(100),
+});
 const validDateString = z
   .string()
   .refine((v) => !Number.isNaN(new Date(v).getTime()), "must be a valid date");
 
 export const adminListBulletinSchema = z.object({
   query: z.object({
-    search: z.string().optional().transform((v) => v?.trim()),
+    search: z.string().optional().transform((v) => {
+      const value = v?.trim();
+      return value ? value : undefined;
+    }),
+    page: paginationSchema.shape.page.optional(),
+    limit: paginationSchema.shape.limit.optional(),
   }).optional(),
 });
 
 export const adminCreateBulletinSchema = z.object({
   body: z.object({
-    title: z.string().min(1, "title is required").max(250),
-    bulletin_image_url: nullableUrl(),
-    date: validDateString,
-    file_url: z.string().url("file_url must be a valid URL"),
-    file_type: nullableString(100),
-    file_size: nullableString(100),
+    title: z.string().trim().min(1, "title is required").max(250),
+    year: z.coerce.number().int().min(1900, "invalid year").max(3000, "invalid year"),
+    month: z.string().trim().min(1, "month is required").max(20, "month is too long"),
   }),
 });
 
@@ -34,16 +39,12 @@ export const adminUpdateBulletinSchema = z.object({
   }),
   body: z
     .object({
-      title: z.string().min(1).max(250).optional(),
-      bulletin_image_url: nullableUrl(),
-      date: validDateString.optional(),
-      file_url: z.string().url("file_url must be a valid URL").optional(),
-      file_type: nullableString(100),
-      file_size: nullableString(100),
+      title: z.string().trim().min(1).max(250).optional(),
+      year: z.coerce.number().int().min(1900, "invalid year").max(3000, "invalid year").optional(),
+      month: z.string().trim().min(1, "month is required").max(20, "month is too long").optional(),
     })
-    .refine((body) => Object.keys(body).length > 0, {
-      message: "At least one field must be provided",
-    }),
+    .optional()
+    .default({}),
 });
 
 export const adminDeleteBulletinSchema = z.object({

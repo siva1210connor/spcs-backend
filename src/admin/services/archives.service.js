@@ -12,11 +12,22 @@ function makeError(message, statusCode, code, cause) {
 }
 
 function mapArchiveRow(row) {
+  const formattedFileType =
+    row.fileType === "application/pdf"
+      ? "PDF"
+      : row.fileType === "application/vnd.ms-excel"
+        ? "XLS"
+        : row.fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ? "XLSX"
+          : row.fileType === "text/csv"
+            ? "CSV"
+            : row.fileType ?? null;
+
   return {
     id: row.id,
     title: row.title,
     uploaded_date: row.uploadedDate,
-    file_type: row.fileType ?? null,
+    file_type: formattedFileType,
     archive_file_url: row.fileUrl,
   };
 }
@@ -25,8 +36,8 @@ export async function adminListArchives({ query } = {}) {
   try {
     const where = query?.search
       ? {
-          title: { contains: query.search, mode: "insensitive" },
-        }
+        title: { contains: query.search, mode: "insensitive" },
+      }
       : {};
 
     const rows = await prisma.archive.findMany({
@@ -52,16 +63,25 @@ export async function adminListArchives({ query } = {}) {
   }
 }
 
-export async function adminCreateArchive({ req, input }) {
+export async function adminCreateArchive({ req, input, file }) {
   try {
+    if (!file) {
+      throw makeError(
+        "archive_file is required",
+        400,
+        "ADMIN_ARCHIVE_FILE_REQUIRED"
+      );
+    }
+
+    const uploadedDate = new Date(input.year, 0, 1);
+    const fileUrl = `/uploads/archives/${file.filename}`;
+
     const created = await prisma.archive.create({
       data: {
-        title: input.title,
-        uploadedDate: input.uploaded_date
-          ? new Date(input.uploaded_date)
-          : new Date(),
-        fileType: input.file_type ?? null,
-        fileUrl: input.archive_file_url,
+        title: input.title.trim(),
+        uploadedDate,
+        fileType: file.mimetype ?? null,
+        fileUrl,
       },
       select: {
         id: true,
@@ -76,17 +96,25 @@ export async function adminCreateArchive({ req, input }) {
       msg: "created successfully",
       item: mapArchiveRow(created),
     };
-    await createAdminAuditLog({
-      req,
-      action: "CREATE",
-      resourceType: AUDIT_RESOURCE_TYPES.ARCHIVE,
-      resourceId: created.id,
-      message: "Archive created",
-      beforeJson: null,
-      afterJson: response.item,
-    });
+
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "CREATE",
+        resourceType: AUDIT_RESOURCE_TYPES.ARCHIVE,
+        resourceId: created.id,
+        message: "Archive created",
+        beforeJson: null,
+        afterJson: response.item,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on archive create:", auditErr);
+    }
+
     return response;
   } catch (err) {
+    if (err?.code && err?.statusCode) throw err;
+
     throw makeError(
       "Failed to create archive",
       500,
@@ -96,7 +124,7 @@ export async function adminCreateArchive({ req, input }) {
   }
 }
 
-export async function adminUpdateArchive({ req, id, input }) {
+export async function adminUpdateArchive({ req, id, input, file }) {
   try {
     const existing = await prisma.archive.findUnique({
       where: { id },
@@ -108,18 +136,25 @@ export async function adminUpdateArchive({ req, id, input }) {
         fileUrl: true,
       },
     });
+
     if (!existing) {
       throw makeError("Archive not found", 404, "ADMIN_ARCHIVE_NOT_FOUND");
     }
+
     const data = {};
 
-    if (input.title !== undefined) data.title = input.title;
-    if (input.uploaded_date !== undefined)
-      data.uploadedDate = new Date(input.uploaded_date);
-    if (Object.prototype.hasOwnProperty.call(input, "file_type"))
-      data.fileType = input.file_type;
-    if (input.archive_file_url !== undefined)
-      data.fileUrl = input.archive_file_url;
+    if (input.title !== undefined) {
+      data.title = input.title.trim();
+    }
+
+    if (input.year !== undefined) {
+      data.uploadedDate = new Date(input.year, 0, 1);
+    }
+
+    if (file) {
+      data.fileUrl = `/uploads/archives/${file.filename}`;
+      data.fileType = file.mimetype ?? null;
+    }
 
     const updated = await prisma.archive.update({
       where: { id },
@@ -137,20 +172,29 @@ export async function adminUpdateArchive({ req, id, input }) {
       msg: "updated successfully",
       item: mapArchiveRow(updated),
     };
-    await createAdminAuditLog({
-      req,
-      action: "UPDATE",
-      resourceType: AUDIT_RESOURCE_TYPES.ARCHIVE,
-      resourceId: existing.id,
-      message: "Archive updated",
-      beforeJson: mapArchiveRow(existing),
-      afterJson: response.item,
-    });
+
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "UPDATE",
+        resourceType: AUDIT_RESOURCE_TYPES.ARCHIVE,
+        resourceId: existing.id,
+        message: "Archive updated",
+        beforeJson: mapArchiveRow(existing),
+        afterJson: response.item,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on archive update:", auditErr);
+    }
+
     return response;
   } catch (err) {
+    if (err?.code && err?.statusCode) throw err;
+
     if (err?.code === "P2025") {
       throw makeError("Archive not found", 404, "ADMIN_ARCHIVE_NOT_FOUND", err);
     }
+
     throw makeError(
       "Failed to update archive",
       500,
@@ -185,18 +229,23 @@ export async function adminDeleteArchive({ req, id }) {
       msg: "deleted successfully",
     };
 
-    await createAdminAuditLog({
-      req,
-      action: "DELETE",
-      resourceType: AUDIT_RESOURCE_TYPES.ARCHIVE,
-      resourceId: existing.id,
-      message: "Archive deleted",
-      beforeJson: mapArchiveRow(existing),
-      afterJson: null,
-    });
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "DELETE",
+        resourceType: AUDIT_RESOURCE_TYPES.ARCHIVE,
+        resourceId: existing.id,
+        message: "Archive deleted",
+        beforeJson: mapArchiveRow(existing),
+        afterJson: null,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on archive delete:", auditErr);
+    }
 
     return response;
   } catch (err) {
+    if (err?.code && err?.statusCode) throw err;
     if (err?.code === "P2025") {
       throw makeError("Archive not found", 404, "ADMIN_ARCHIVE_NOT_FOUND", err);
     }
@@ -208,6 +257,7 @@ export async function adminDeleteArchive({ req, id }) {
     );
   }
 }
+
 
 export async function adminDownloadArchive({ id }) {
   try {
@@ -226,10 +276,7 @@ export async function adminDownloadArchive({ id }) {
       throw makeError("Archive not found", 404, "ADMIN_ARCHIVE_NOT_FOUND");
     }
 
-    return {
-      msg: "download ready",
-      item: mapArchiveRow(archive),
-    };
+    return archive;
   } catch (err) {
     if (err?.code && err?.statusCode) throw err;
     throw makeError(

@@ -205,7 +205,14 @@ export async function adminDeleteCategory({ req, categoryId }) {
     return { msg: "Deleted successfully" };
   } catch (err) {
     if (isAppError(err)) throw err;
-
+    if (err?.code === "P2003") {
+      throw makeError(
+        "Cannot delete category with existing books",
+        409,
+        "CATEGORY_HAS_BOOKS",
+        err
+      );
+    }
     if (err?.code === "P2025") {
       throw makeError("Category not found", 404, "CATEGORY_NOT_FOUND", err);
     }

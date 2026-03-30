@@ -1,21 +1,36 @@
 import { Router } from "express";
 import {
   adminOffersListController,
-  adminOffersUpsertController,
+  adminCreateOfferController,
   adminOfferDeleteController,
+  adminOfferUpdateController
 } from "../controllers/offers.controller.js";
 
 import { validate } from "../../middleware/validate.middleware.js";
 import {
-  upsertOffersSchema,
+
+
+  adminCreateOfferSchema,
   deleteOfferSchema,
   listOffersSchema,
-} from "../validators/offers.validator.js";
 
+  updateOfferSchema
+} from "../validators/offers.validator.js";
+import { offerUpload } from '../../middleware/upload.js'
 export const adminOffersRouter = Router();
 
 adminOffersRouter.get("/", validate(listOffersSchema), adminOffersListController);
-
-adminOffersRouter.put("/", validate(upsertOffersSchema), adminOffersUpsertController);
+adminOffersRouter.post(
+  "/",
+  offerUpload.single("image"),
+  validate(adminCreateOfferSchema),
+  adminCreateOfferController
+);
+adminOffersRouter.put(
+  "/:offerId",
+  offerUpload.single("image"),
+  validate(updateOfferSchema),
+  adminOfferUpdateController
+);
 
 adminOffersRouter.delete("/:offerId", validate(deleteOfferSchema), adminOfferDeleteController);

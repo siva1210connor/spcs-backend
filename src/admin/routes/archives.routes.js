@@ -15,7 +15,7 @@ import {
   adminArchivesDeleteController,
   adminArchivesDownloadController,
 } from "../controllers/archives.controller.js";
-
+import { archiveUpload } from "../../middleware/upload.js"
 export const adminArchivesRouter = Router();
 
 /**
@@ -24,6 +24,16 @@ export const adminArchivesRouter = Router();
 
 adminArchivesRouter.get("/", validate(adminListArchivesSchema), adminArchivesListController);
 adminArchivesRouter.get("/download/:id", validate(adminDownloadArchiveSchema), adminArchivesDownloadController);
-adminArchivesRouter.post("/", validate(adminCreateArchiveSchema), adminArchivesCreateController);
-adminArchivesRouter.put("/:id", validate(adminUpdateArchiveSchema), adminArchivesUpdateController);
+adminArchivesRouter.post(
+  "/",
+  archiveUpload.single("archive_file"),
+  validate(adminCreateArchiveSchema),
+  adminArchivesCreateController
+);
+adminArchivesRouter.put(
+  "/:id",
+  archiveUpload.single("archive_file"),
+  validate(adminUpdateArchiveSchema),
+  adminArchivesUpdateController
+);
 adminArchivesRouter.delete("/:id", validate(adminDeleteArchiveSchema), adminArchivesDeleteController);
