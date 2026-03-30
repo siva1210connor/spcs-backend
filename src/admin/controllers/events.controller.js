@@ -7,7 +7,6 @@ import {
   adminUpdateEvent,
   adminDeleteEvent,
 } from "../services/events.service.js";
-
 export const adminEventsListController = asyncHandler(async (req, res) => {
   const { type } = req.validated.query;
   const data = await adminListEvents({ type });
@@ -15,16 +14,23 @@ export const adminEventsListController = asyncHandler(async (req, res) => {
 });
 
 export const adminEventsCreateController = asyncHandler(async (req, res) => {
-  const data = await adminCreateEvent({ req, input: req.validated.body });
+  const data = await adminCreateEvent({
+    req,
+    input: req.validated.body,
+  });
+
   return ok(res, data, data.msg);
 });
 
 export const adminEventsUpdateController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await adminUpdateEvent({ req, id, input: req.validated.body });
+  const data = await adminUpdateEvent({
+    req,
+    id,
+    input: req.validated.body || {},
+  });
   return ok(res, data, data.msg);
 });
-
 export const adminEventsDeleteController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
   const data = await adminDeleteEvent({ req, id });

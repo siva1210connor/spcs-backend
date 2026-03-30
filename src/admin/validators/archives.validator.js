@@ -10,16 +10,20 @@ const validDateString = z
 
 export const adminListArchivesSchema = z.object({
   query: z.object({
-    search: z.string().optional().transform((v) => v?.trim()),
+    search: z.string().optional().transform((v) => {
+      const value = v?.trim();
+      return value ? value : undefined;
+    }),
   }).optional(),
 });
-
 export const adminCreateArchiveSchema = z.object({
   body: z.object({
-    title: z.string().min(1, "title is required").max(250),
-    uploaded_date: validDateString.optional(),
-    file_type: nullableString(100),
-    archive_file_url: z.string().url("archive_file_url must be a valid URL"),
+    title: z.string().trim().min(1, "title is required").max(250),
+    year: z.coerce
+      .number()
+      .int()
+      .min(1900, "invalid year")
+      .max(3000, "invalid year"),
   }),
 });
 
@@ -29,14 +33,16 @@ export const adminUpdateArchiveSchema = z.object({
   }),
   body: z
     .object({
-      title: z.string().min(1).max(250).optional(),
-      uploaded_date: validDateString.optional(),
-      file_type: nullableString(100),
-      archive_file_url: z.string().url("archive_file_url must be a valid URL").optional(),
+      title: z.string().trim().min(1).max(250).optional(),
+      year: z.coerce
+        .number()
+        .int()
+        .min(1900, "invalid year")
+        .max(3000, "invalid year")
+        .optional(),
     })
-    .refine((body) => Object.keys(body).length > 0, {
-      message: "At least one field must be provided",
-    }),
+    .optional()
+    .default({}),
 });
 
 export const adminDeleteArchiveSchema = z.object({

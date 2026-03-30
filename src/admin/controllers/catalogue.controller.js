@@ -14,17 +14,36 @@ export const adminCatalogueListController = asyncHandler(async (req, res) => {
 });
 
 export const adminCatalogueCreateController = asyncHandler(async (req, res) => {
-  const data = await adminCreateCatalogue(req, req.validated.body);
+  const data = await adminCreateCatalogue({
+    req,
+    input: req.validated.body,
+    file: req.file,
+  });
   return ok(res, data, data.msg);
 });
 
 export const adminCatalogueUpdateController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
+
+  const body = req.validated.body ?? {};
+  const hasBodyFields = Object.keys(body).length > 0;
+  const hasCatalogPdf = Boolean(req.file);
+
+  if (!hasBodyFields && !hasCatalogPdf) {
+    throw makeError(
+      "At least one field or file must be provided",
+      400,
+      "ADMIN_CATALOGUE_UPDATE_EMPTY"
+    );
+  }
+
   const data = await adminUpdateCatalogue({
     req,
     id,
-    input: req.validated.body,
+    input: body,
+    file: req.file,
   });
+
   return ok(res, data, data.msg);
 });
 

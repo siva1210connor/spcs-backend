@@ -1,7 +1,5 @@
-===========================================
-FILE: src\app.js
-===========================================
 
+===== FILE: src/app.js =====
 import express from "express";
 import morgan from "morgan";
 import { httpLogger } from "./config/logger.js";
@@ -9,12 +7,16 @@ import { securityMiddleware } from "./middleware/security.middleware.js";
 import { globalRateLimiter } from "./middleware/rateLimit.middleware.js";
 import { apiRouter } from "./routes/index.js";
 import { notFound, errorHandler } from "./middleware/error.middleware.js";
+import path from "path";
 
 export function createApp() {
   const app = express();
 
   // Request logging
   app.use(httpLogger);
+
+  app.set("trust proxy", 1);
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   // Body parsing
   app.use(express.json({ limit: "1mb" }));
@@ -27,7 +29,7 @@ export function createApp() {
   securityMiddleware(app);
 
   // Global rate limiting
-  app.use(globalRateLimiter);
+  // app.use(globalRateLimiter);
 
   // Routes
   app.use("/api", apiRouter);
@@ -39,693 +41,140 @@ export function createApp() {
   return app;
 }
 
-
-
-
-===========================================
-FILE: src\index.js
-===========================================
-
-import { createApp } from "./app.js";
-import { env } from "./config/env.js";
-import { prisma } from "./config/prisma.js";
-import { connectRedis } from "./config/redis.js";
-
-async function bootstrap() {
-  await connectRedis();
-  await prisma.$connect();
-
-  const app = createApp();
-  app.listen(env.PORT, () => {
-    console.log(`API running on port ${env.PORT} (${env.NODE_ENV})`);
-  });
-}
-
-bootstrap().catch((err) => {
-  console.error("Startup error:", err);
-  process.exit(1);
-});
-
-
-
-===========================================
-FILE: src\config\env.js
-===========================================
-
-import dotenv from "dotenv";
-dotenv.config();
-
-const required = ["DATABASE_URL", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
-for (const key of required) {
-  if (!process.env[key]) throw new Error(`Missing env var: ${key}`);
-}
-
-export const env = {
-  NODE_ENV: process.env.NODE_ENV ?? "development",
-  PORT: Number(process.env.PORT ?? 4000),
-  DATABASE_URL: process.env.DATABASE_URL,
-  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
-  JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
-  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN ?? "7d",
-  REDIS_URL: process.env.REDIS_URL ?? null,
-  CORS_ORIGINS: (process.env.CORS_ORIGINS ?? "").split(",").filter(Boolean),
-  RATE_LIMIT_WINDOW_MS: Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60000),
-  RATE_LIMIT_MAX: Number(process.env.RATE_LIMIT_MAX ?? 120),
-};
-
-
-
-===========================================
-FILE: src\config\logger.js
-===========================================
-
-import pino from "pino";
-import pinoHttp from "pino-http";
-import { env } from "./env.js";
-
-export const logger = pino({
-  level: env.NODE_ENV === "production" ? "info" : "debug",
-  redact: ["req.headers.authorization", "req.headers.cookie"],
-});
-
-export const httpLogger = pinoHttp({ logger });
-
-
-
-===========================================
-FILE: src\config\prisma.js
-===========================================
-
-import { PrismaClient } from "@prisma/client";
-
-export const prisma = new PrismaClient({
-  log: ["error", "warn"],
-});
-
-
-
-
-===========================================
-FILE: src\config\redis.js
-===========================================
-
-import { createClient } from "redis";
-import { env } from "./env.js";
-
-export const redis = env.REDIS_URL
-  ? createClient({ url: env.REDIS_URL })
-  : null;
-
-export async function connectRedis() {
-  if (!redis) return;
-  redis.on("error", (err) => console.error("Redis error:", err));
-  if (!redis.isOpen) await redis.connect();
-}
-
-
-
-===========================================
-FILE: src\controllers\auth.controller.js
-===========================================
-
-import { prisma } from "../config/prisma.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { ok, created } from "../utils/apiResponse.js";
-import { env } from "../config/env.js";
-import { randomNumericOtp } from "../utils/crypto.js";
-import { getOtp, setOtp, clearOtp } from "../services/otp.service.js";
-import { issueTokens, rotateRefreshToken, logoutRefreshToken } from "../services/auth.service.js";
-import { hashToken } from "../utils/crypto.js";
-
-function getClientMeta(req) {
-  return {
-    userAgent: req.headers["user-agent"] ?? null,
-    ip: req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ?? req.ip,
-  };
-}
-
-export const login = asyncHandler(async (req, res) => {
-  const { phone } = req.validated.body;
-  const existing = await getOtp(phone);
-
-  // resend cooldown
-  if (existing?.lastSentAt) {
-    const cooldown = Number(env.OTP_RESEND_COOLDOWN_SECONDS ?? 60) * 1000;
-    if (Date.now() - existing.lastSentAt < cooldown) {
-      return res.status(429).json({
-        success: false,
-        error: { code: "OTP_COOLDOWN", message: "Please wait before requesting OTP again" },
-      });
-    }
-  }
-
-  const otp = randomNumericOtp(6);
-  await setOtp(phone, otp);
-
-  // TODO: integrate SMS provider here.
-  // For dev only:
-  const revealOtp = env.NODE_ENV !== "production" ? otp : undefined;
-
-  return ok(res, { phone, ...(revealOtp ? { devOtp: revealOtp } : {}) }, "OTP sent");
-});
-
-export const verifyOtp = asyncHandler(async (req, res) => {
-  const { phone, otp, deviceId } = req.validated.body;
-
-  const record = await getOtp(phone);
-  if (!record) {
-    return res.status(400).json({
-      success: false,
-      error: { code: "OTP_EXPIRED", message: "OTP expired or not found" },
-    });
-  }
-
-  const otpHash = hashToken(otp);
-  if (otpHash !== record.otpHash) {
-    return res.status(401).json({
-      success: false,
-      error: { code: "OTP_INVALID", message: "Invalid OTP" },
-    });
-  }
-
-  await clearOtp(phone);
-
-  const user = await prisma.user.upsert({
-    where: { phone },
-    update: {},
-    create: { phone, role: "USER" },
-  });
-
-  const { userAgent, ip } = getClientMeta(req);
-  const tokens = await issueTokens({ user, userAgent, ip, deviceId });
-
-  return ok(res, { token: tokens.accessToken, refreshToken: tokens.refreshToken }, "Login successful");
-});
-
-export const signUp = asyncHandler(async (req, res) => {
-  const { name, email, phone } = req.validated.body;
-
-  const user = await prisma.user.upsert({
-    where: { phone },
-    update: { name, email },
-    create: { name, email, phone, role: "USER" },
-  });
-
-  return created(res, { user_id: user.id }, "Signup successful");
-});
-
-export const refresh = asyncHandler(async (req, res) => {
-  const { refreshToken, deviceId } = req.validated.body;
-  const { userAgent, ip } = getClientMeta(req);
-
-  const tokens = await rotateRefreshToken({ refreshToken, userAgent, ip, deviceId });
-  return ok(res, { token: tokens.accessToken, refreshToken: tokens.refreshToken }, "Token refreshed");
-});
-
-export const logout = asyncHandler(async (req, res) => {
-  const { refreshToken } = req.validated.body;
-  await logoutRefreshToken(refreshToken);
-  return ok(res, {}, "Logged out");
-});
-
-
-
-===========================================
-FILE: src\controllers\health.controller.js
-===========================================
-
-import { ok } from "../utils/apiResponse.js";
-
-export function healthCheck(req, res) {
-  return ok(res, { status: "ok" }, "Service healthy");
-}
-
-
-
-===========================================
-FILE: src\middleware\auth.middleware.js
-===========================================
-
-import jwt from "jsonwebtoken";
-import { env } from "../config/env.js";
-
-export function requireAuth(req, res, next) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    return res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "Missing token" } });
-  }
-
-  const token = header.split(" ")[1];
-  try {
-    const payload = jwt.verify(token, env.JWT_ACCESS_SECRET);
-    req.user = payload;
-    return next();
-  } catch {
-    return res.status(401).json({ success: false, error: { code: "UNAUTHORIZED", message: "Invalid token" } });
-  }
-}
-
-export function requireAdmin(req, res, next) {
-  if (req.user?.role !== "ADMIN") {
-    return res.status(403).json({ success: false, error: { code: "FORBIDDEN", message: "Admin only" } });
-  }
-  next();
-}
-
-
-
-===========================================
-FILE: src\middleware\error.middleware.js
-===========================================
-
-import { env } from "../config/env.js";
-
-export function notFound(req, res) {
-  res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Route not found" } });
-}
-
-export function errorHandler(err, req, res, next) {
-  const status = err.statusCode ?? 500;
-
-  const payload = {
-    success: false,
-    error: {
-      code: err.code ?? "SERVER_ERROR",
-      message: err.message ?? "Something went wrong",
-    },
-  };
-
-  if (env.NODE_ENV !== "production") {
-    payload.error.stack = err.stack;
-  }
-
-  res.status(status).json(payload);
-}
-
-
-
-===========================================
-FILE: src\middleware\rateLimit.middleware.js
-===========================================
-
-import rateLimit from "express-rate-limit";
-import RedisStore from "rate-limit-redis";
-import { redis } from "../config/redis.js";
-import { env } from "../config/env.js";
-
-export const globalRateLimiter = rateLimit({
-  windowMs: env.RATE_LIMIT_WINDOW_MS,
-  max: env.RATE_LIMIT_MAX,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: { code: "RATE_LIMITED", message: "Too many requests" } },
-  ...(redis
-    ? {
-        store: new RedisStore({
-          sendCommand: (...args) => redis.sendCommand(args),
-        }),
-      }
-    : {}),
-});
-
-export const authRateLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: { code: "AUTH_RATE_LIMITED", message: "Too many OTP attempts" } },
-});
-
-
-
-===========================================
-FILE: src\middleware\security.middleware.js
-===========================================
-
-import helmet from "helmet";
-import cors from "cors";
-import compression from "compression";
-import cookieParser from "cookie-parser";
-import { env } from "../config/env.js";
-
-export function securityMiddleware(app) {
-  app.use(helmet());
-  app.use(compression());
-  app.use(cookieParser());
-
-  app.use(
-    cors({
-      origin: (origin, cb) => {
-        if (!origin) return cb(null, true); // allow mobile apps / postman
-        if (env.CORS_ORIGINS.includes(origin)) return cb(null, true);
-
-        const err = new Error("Not allowed by CORS");
-        err.statusCode = 403;
-        err.code = "CORS_FORBIDDEN";
-        return cb(err);
-      },
-      credentials: true,
-    })
-  );
-}
-
-
-
-===========================================
-FILE: src\middleware\validate.middleware.js
-===========================================
-
-export const validate =
-  (schema) =>
-  (req, res, next) => {
-    const result = schema.safeParse({
-      body: req.body,
-      query: req.query,
-      params: req.params,
-    });
-
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Invalid request",
-          details: result.error.flatten(),
-        },
-      });
-    }
-
-    req.validated = result.data;
-    next();
-  };
-
-
-
-===========================================
-FILE: src\routes\auth.routes.js
-===========================================
-
-import { Router } from "express";
-import { validate } from "../middleware/validate.middleware.js";
-import { authRateLimiter } from "../middleware/rateLimit.middleware.js";
-import {
-  loginSchema,
-  verifyOtpSchema,
-  signUpSchema,
-  refreshSchema,
-  logoutSchema,
-} from "../validators/auth.validator.js";
-import { login, verifyOtp, signUp, refresh, logout } from "../controllers/auth.controller.js";
-
-export const authRouter = Router();
-
-authRouter.post("/login", authRateLimiter, validate(loginSchema), login);
-authRouter.post(
-  "/verifyOtp",
-  authRateLimiter,
-  validate(verifyOtpSchema),
-  verifyOtp,
-);
-authRouter.post("/signUp", authRateLimiter, validate(signUpSchema), signUp);
-
-authRouter.post("/refresh", validate(refreshSchema), refresh);
-authRouter.post("/logout", validate(logoutSchema), logout);
-
-
-
-
-===========================================
-FILE: src\routes\health.routes.js
-===========================================
-
-import { Router } from "express";
-import { healthCheck } from "../controllers/health.controller.js";
-
-export const healthRouter = Router();
-healthRouter.get("/", healthCheck);
-
-
-
-===========================================
-FILE: src\routes\index.js
-===========================================
-
+===== FILE: src/routes/index.js =====
 import { Router } from "express";
 import { healthRouter } from "./health.routes.js";
 import { authRouter } from "./auth.routes.js";
+import { booksRouter } from "./books.routes.js";
+import { categoriesRouter } from "./categories.routes.js";
+import { adminRouter } from "../admin/routes/index.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.middleware.js";
+// import { cartRouter } from "./cart.routes.js";
+// import { wishlistRouter } from "./wishlist.routes.js";
+// import { requireAuth } from "../middleware/auth.middleware.js";
 
 export const apiRouter = Router();
 
+// Admin routes
+apiRouter.use("/admin", requireAuth, requireAdmin, adminRouter);
+
+
 apiRouter.use("/health", healthRouter);
-apiRouter.use("/user/auth", authRouter);
-
-
-
-
-===========================================
-FILE: src\services\auth.service.js
-===========================================
-
-import { prisma } from "../config/prisma.js";
-import { env } from "../config/env.js";
-import { hashToken } from "../utils/crypto.js";
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt.js";
-
-function refreshExpiryDate() {
-  // Basic approach: parse "7d" / "30d" etc.
-  // For enterprise: use ms library; keeping minimal now.
-  const days = String(env.JWT_REFRESH_EXPIRES_IN ?? "7d").replace("d", "");
-  const d = Number(days);
-  const expires = new Date(Date.now() + (isNaN(d) ? 7 : d) * 24 * 60 * 60 * 1000);
-  return expires;
-}
-
-export async function issueTokens({ user, userAgent, ip, deviceId }) {
-  const accessToken = signAccessToken({ sub: user.id, role: user.role, phone: user.phone });
-  const refreshToken = signRefreshToken({ sub: user.id, type: "refresh" });
-
-  await prisma.refreshToken.create({
-    data: {
-      userId: user.id,
-      tokenHash: hashToken(refreshToken),
-      expiresAt: refreshExpiryDate(),
-      userAgent,
-      ip,
-      deviceId,
-    },
-  });
-
-  return { accessToken, refreshToken };
-}
-
-export async function rotateRefreshToken({ refreshToken, userAgent, ip, deviceId }) {
-  const payload = verifyRefreshToken(refreshToken);
-  const userId = payload.sub;
-
-  const existing = await prisma.refreshToken.findFirst({
-    where: {
-      userId,
-      tokenHash: hashToken(refreshToken),
-      revokedAt: null,
-      expiresAt: { gt: new Date() },
-    },
-  });
-
-  if (!existing) {
-    const err = new Error("Invalid refresh token");
-    err.statusCode = 401;
-    err.code = "INVALID_REFRESH";
-    throw err;
-  }
-
-  // revoke old
-  await prisma.refreshToken.update({
-    where: { id: existing.id },
-    data: { revokedAt: new Date() },
-  });
-
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) {
-    const err = new Error("User not found");
-    err.statusCode = 401;
-    err.code = "USER_NOT_FOUND";
-    throw err;
-  }
-
-  return issueTokens({ user, userAgent, ip, deviceId });
-}
-
-export async function logoutRefreshToken(refreshToken) {
-  const payload = verifyRefreshToken(refreshToken);
-  const userId = payload.sub;
-
-  await prisma.refreshToken.updateMany({
-    where: { userId, tokenHash: hashToken(refreshToken), revokedAt: null },
-    data: { revokedAt: new Date() },
-  });
-}
-
-
-
-===========================================
-FILE: src\services\otp.service.js
-===========================================
-
-import { redis } from "../config/redis.js";
-import { hashToken } from "../utils/crypto.js";
-import { env } from "../config/env.js";
-
-function otpKey(phone) {
-  return `otp:${phone}`;
-}
-
-async function ensureRedis() {
-  if (!redis) throw new Error("REDIS_URL missing. Redis required for OTP flow.");
-  if (!redis.isOpen) await redis.connect();
-}
-
-export async function setOtp(phone, otp) {
-  if (!redis) throw new Error("Redis is required for OTP flow in this setup");
-
-  const now = Date.now();
-  const ttl = Number(env.OTP_TTL_SECONDS ?? 300);
-  const payload = JSON.stringify({
-    otpHash: hashToken(otp),
-    lastSentAt: now,
-    expiresAt: now + ttl * 1000,
-  });
-
-  await redis.set(otpKey(phone), payload, { EX: ttl });
-}
-
-export async function getOtp(phone) {
-  if (!redis) throw new Error("Redis is required for OTP flow in this setup");
-  const raw = await redis.get(otpKey(phone));
-  return raw ? JSON.parse(raw) : null;
-}
-
-export async function clearOtp(phone) {
-  if (!redis) throw new Error("Redis is required for OTP flow in this setup");
-  await redis.del(otpKey(phone));
-}
-
-
-
-===========================================
-FILE: src\utils\apiResponse.js
-===========================================
-
-export const ok = (res, data = {}, message = "") =>
-  res.status(200).json({ success: true, data, message });
-
-export const created = (res, data = {}, message = "") =>
-  res.status(201).json({ success: true, data, message });
-
-
-
-===========================================
-FILE: src\utils\asyncHandler.js
-===========================================
-
-export const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
-
-
-
-===========================================
-FILE: src\utils\constants.js
-===========================================
-
-export const ROLES = {
-  USER: "USER",
-  ADMIN: "ADMIN",
-};
-
-
-
-===========================================
-FILE: src\utils\crypto.js
-===========================================
-
-import crypto from "crypto";
-
-export function hashToken(token) {
-  return crypto.createHash("sha256").update(token).digest("hex");
-}
-
-export function randomNumericOtp(length = 6) {
-  const min = 10 ** (length - 1);
-  const max = 10 ** length - 1;
-  return String(Math.floor(Math.random() * (max - min + 1) + min));
-}
-
-export function randomToken(bytes = 32) {
-  return crypto.randomBytes(bytes).toString("hex");
-}
-
-
-
-===========================================
-FILE: src\utils\jwt.js
-===========================================
-
-import jwt from "jsonwebtoken";
-import { env } from "../config/env.js";
-
-export function signAccessToken(payload) {
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, { expiresIn: env.JWT_ACCESS_EXPIRES_IN });
-}
-
-export function signRefreshToken(payload) {
-  return jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN });
-}
-
-export function verifyRefreshToken(token) {
-  return jwt.verify(token, env.JWT_REFRESH_SECRET);
-}
-
-
-
-===========================================
-FILE: src\validators\auth.validator.js
-===========================================
-
-import { z } from "zod";
-
-export const loginSchema = z.object({
-  body: z.object({
-    phone: z.string().min(8).max(15),
-  }),
-});
-
-export const verifyOtpSchema = z.object({
-  body: z.object({
-    phone: z.string().min(8).max(15),
-    otp: z.string().length(4).or(z.string().length(6)),
-  }),
-});
-
-export const signUpSchema = z.object({
-  body: z.object({
-    name: z.string().min(2),
-    email: z.string().email(),
-    phone: z.string().min(8).max(15),
-  }),
-});
-
-export const refreshSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().min(20),
-    deviceId: z.string().optional(),
-  }),
-});
-
-export const logoutSchema = z.object({
-  body: z.object({
-    refreshToken: z.string().min(20),
-  }),
-});
-
-
-
+apiRouter.use("/auth", authRouter);
+
+apiRouter.use("/categories", categoriesRouter);
+apiRouter.use("/books", booksRouter);
+
+//apiRouter.use("/cart", requireAuth, cartRouter);
+//apiRouter.use("/wishlist", requireAuth, wishlistRouter);
+
+===== FILE: src/admin/routes/dashboard.routes.js =====
+// src/admin/routes/dashboard.routes.js
+import { Router } from "express";
+import { validate } from "../../middleware/validate.middleware.js";
+import {
+  adminDashboardSchema,
+  listSlidersSchema,
+  updateSliderSchema,
+  deleteSliderSchema,
+  createSliderSchema,
+} from "../validators/dashboard.validator.js";
+import {
+  adminDashboardController,
+  adminSliderListController,
+  adminSliderUpdateController,
+  adminSliderDeleteController,
+  adminSliderCreateController,
+} from "../controllers/dashboard.controller.js";
+import { multerErrorHandler } from "../../middleware/multerError.middleware.js";
+import { sliderUpload } from "../../middleware/upload.js";
+
+export const adminDashboardRouter = Router();
+
+/**
+ * Base: /api/admin/dashboard
+ */
+adminDashboardRouter.get(
+  "/",
+  validate(adminDashboardSchema),
+  adminDashboardController,
+);
+
+/**
+ * Slider APIs (Base: /api/admin/dashboard/slider)
+ */
+adminDashboardRouter.get(
+  "/slider",
+  validate(listSlidersSchema),
+  adminSliderListController,
+);
+
+//added multer and upload handling for slider creation
+adminDashboardRouter.post(
+  "/slider",
+  sliderUpload.single("slider_image"), // 1. multer
+  multerErrorHandler, // 2. handle multer errors
+  validate(createSliderSchema), // 3. validation
+  adminSliderCreateController, // 4. controller
+);
+adminDashboardRouter.put(
+  "/slider/:id",
+  sliderUpload.single("slider_image"), // 1. multer
+  multerErrorHandler, // 2. handle multer errors
+  validate(updateSliderSchema),
+  adminSliderUpdateController,
+);
+adminDashboardRouter.delete(
+  "/slider/:id",
+  validate(deleteSliderSchema),
+  adminSliderDeleteController,
+);
+
+===== FILE: src/admin/routes/index.js =====
+// src/admin/routes/index.js
+import { Router } from "express";
+import { adminMeRouter } from "./me.routes.js";
+import { adminDashboardRouter } from "./dashboard.routes.js";
+import { adminBooksRouter } from "./books.routes.js";
+import { adminOrdersRouter } from "./orders.routes.js";
+import { adminCustomersRouter } from "./customers.routes.js";
+import { adminOffersRouter } from "./offers.routes.js";
+import { adminCategoriesRouter } from "./categories.routes.js";
+import { adminRulesRouter } from "./rules.routes.js";
+import { adminEventsRouter } from "./events.routes.js";
+import { adminAdsRouter } from "./ads.routes.js";
+import { adminAwardsRouter } from "./awards.routes.js";
+import { adminDownloadsRouter } from "./downloads.routes.js";
+import { adminCatalogueRouter } from "./catalogue.routes.js";
+import { adminArchivesRouter } from "./archives.routes.js";
+import { adminBulletinRouter } from "./bulletin.routes.js";
+import { adminFeedbackRouter } from "./feedback.routes.js";
+import { adminReviewsRouter } from "./reviews.routes.js";
+import { adminSchemeRouter } from "./scheme.routes.js";
+import { adminGalleryRouter } from "./gallery.routes.js";
+import { adminAuditLogsRouter } from "./audit-logs.routes.js";
+
+export const adminRouter = Router();
+
+adminRouter.use("/me", adminMeRouter);
+adminRouter.use("/dashboard", adminDashboardRouter);
+adminRouter.use("/book", adminBooksRouter);
+adminRouter.use("/categories", adminCategoriesRouter);
+adminRouter.use("/orders", adminOrdersRouter);
+adminRouter.use("/customers", adminCustomersRouter);
+adminRouter.use("/offers", adminOffersRouter);
+adminRouter.use("/rules", adminRulesRouter);
+adminRouter.use("/events", adminEventsRouter);
+adminRouter.use("/ads", adminAdsRouter);
+adminRouter.use("/awards", adminAwardsRouter);
+adminRouter.use("/downloads", adminDownloadsRouter);
+adminRouter.use("/catalogue", adminCatalogueRouter);
+adminRouter.use("/archives", adminArchivesRouter);
+adminRouter.use("/bulletin", adminBulletinRouter);
+adminRouter.use("/feedback", adminFeedbackRouter);
+adminRouter.use("/reviews", adminReviewsRouter);
+adminRouter.use("/scheme", adminSchemeRouter);
+adminRouter.use("/gallery", adminGalleryRouter);
+adminRouter.use("/audit-logs", adminAuditLogsRouter);
+
+Need to do some more endpoints i will tell you what it is  

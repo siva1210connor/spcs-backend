@@ -21,10 +21,16 @@ const dateDDMMYYYY = z
 
 export const adminListCustomersSchema = z.object({
   query: z.object({
-    search: z.string().optional().transform((v) => v?.trim()),
-    from_date: dateDDMMYYYY,
-    to_date: dateDDMMYYYY,
-    page: paginationSchema.shape.page,
-    limit: paginationSchema.shape.limit,
+    search: z
+      .string()
+      .optional()
+      .transform((v) => {
+        const value = v?.trim();
+        return value ? value : undefined;
+      }),
+    from_date: dateDDMMYYYY.optional(),
+    to_date: dateDDMMYYYY.optional(),
+    page: paginationSchema.shape.page.optional(),
+    limit: paginationSchema.shape.limit.optional(),
   }),
 });

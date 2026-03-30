@@ -10,23 +10,28 @@ const awardTypeSchema = z
   );
 
 const nullableString = (max = 5000) =>
-  z.string().max(max).nullable().optional();
+  z.string().trim().max(max).nullable().optional();
 
 const nullableUrl = () =>
   z.string().url("must be a valid URL").nullable().optional();
-
+const paginationSchema = z.object({
+  page: z.coerce.number().int().min(1),
+  limit: z.coerce.number().int().min(1).max(100),
+});
 export const adminListAwardsSchema = z.object({
-  query: z.object({}).optional(),
+  query: z.object({
+    page: paginationSchema.shape.page.optional(),
+    limit: paginationSchema.shape.limit.optional(),
+  }).optional(),
 });
 
 export const adminCreateAwardSchema = z.object({
   body: z.object({
-    title: z.string().min(1, "title is required").max(250),
+    title: z.string().trim().min(1, "title is required").max(250),
     description: nullableString(5000),
     type: awardTypeSchema,
-    image_url: nullableUrl(),
   }),
-});
+})
 
 export const adminUpdateAwardSchema = z.object({
   params: z.object({
@@ -34,14 +39,12 @@ export const adminUpdateAwardSchema = z.object({
   }),
   body: z
     .object({
-      title: z.string().min(1).max(250).optional(),
+      title: z.string().trim().min(1).max(250).optional(),
       description: nullableString(5000),
       type: awardTypeSchema.optional(),
-      image_url: nullableUrl(),
     })
-    .refine((body) => Object.keys(body).length > 0, {
-      message: "At least one field must be provided",
-    }),
+    .optional()
+    .default({}),
 });
 
 export const adminDeleteAwardSchema = z.object({

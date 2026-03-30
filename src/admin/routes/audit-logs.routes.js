@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { validate } from "../../middleware/validate.middleware.js";
 import { adminListAuditLogsSchema } from "../validators/audit-logs.validator.js";
-import { adminAuditLogsListController } from "../controllers/audit-logs.controller.js";
+import { adminAuditLogsListController } from "../controllers/audit-log.controller.js";
 
 export const adminAuditLogsRouter = Router();
 

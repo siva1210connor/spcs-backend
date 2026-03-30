@@ -26,16 +26,24 @@ export const adminListCategoriesSchema = z.object({
 
 export const adminCreateCategorySchema = z.object({
   body: z.object({
-    name: z.string().min(2, "name too short").max(100, "name too long"),
+    name: z
+      .string()
+      .transform((v) => v.trim())
+      .refine((v) => v.length >= 2, "name too short")
+      .refine((v) => v.length <= 100, "name too long"),
   }),
 });
 
 export const adminUpdateCategorySchema = z.object({
   params: z.object({
-    categoryId: z.string().min(1, "categoryId required"),
+    categoryId: z.string().cuid("Invalid categoryId"),
   }),
   body: z.object({
-    name: z.string().min(2, "name too short").max(100, "name too long"),
+    name: z
+      .string()
+      .transform((v) => v.trim())
+      .refine((v) => v.length >= 2, "name too short")
+      .refine((v) => v.length <= 100, "name too long"),
   }),
 });
 

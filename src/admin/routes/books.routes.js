@@ -8,6 +8,18 @@ import {
   adminCreateBookSchema,
   adminUpdateBookSchema,
   adminDeleteBookSchema,
+
+  // Category
+  adminListCategoriesSchema,
+  adminUpdateCategorySchema,
+  adminDeleteCategorySchema,
+  adminCreateCategorySchema,
+
+
+
+
+  // Export
+  adminExportBooksCsvSchema
 } from "../validators/books.validator.js";
 import {
   adminBookCategoriesController,
@@ -16,6 +28,12 @@ import {
   adminBookCreateController,
   adminBookUpdateController,
   adminBookDeleteController,
+  // Category
+  adminUpdateCategoryController,
+  adminDeleteCategoryController,
+  adminCreateCategoryController,
+
+  adminExportBooksCsvController
 } from "../controllers/books.controller.js";
 
 export const adminBooksRouter = Router();
@@ -24,13 +42,8 @@ export const adminBooksRouter = Router();
  * Base path: /api/admin/book
  */
 
-
-// categories
-adminBooksRouter.get("/categories", validate(adminBookCategoriesSchema), adminBookCategoriesController);
-
 // list books
 adminBooksRouter.get("/", validate(adminListBooksSchema), adminBookListController);
-
 // get book details
 adminBooksRouter.get("/:bookId", validate(adminGetBookSchema), adminBookGetController);
 
@@ -42,3 +55,10 @@ adminBooksRouter.put("/:bookId", validate(adminUpdateBookSchema), adminBookUpdat
 
 // delete book
 adminBooksRouter.delete("/:bookId", validate(adminDeleteBookSchema), adminBookDeleteController);
+
+// export as csv
+adminBooksRouter.get(
+  "/export/csv",
+  validate(adminExportBooksCsvSchema),
+  adminExportBooksCsvController
+);

@@ -13,10 +13,17 @@ export const adminListAdsSchema = z.object({
   query: z.object({}).optional(),
 });
 
+const adPlacementSchema = z
+  .string()
+  .transform((v) => v.toLowerCase())
+  .refine(
+    (v) => ["sidebar_square", "top_banner"].includes(v),
+    "type must be sidebar_square or top_banner"
+  );
+
 export const adminCreateAdSchema = z.object({
   body: z.object({
-    type: adTypeSchema,
-    ad_image_url: z.string().url("ad_image_url must be a valid URL"),
+    type: adPlacementSchema,
     link: nullableUrl(),
   }),
 });

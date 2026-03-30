@@ -83,7 +83,10 @@ export const verifyOtp = asyncHandler(async (req, res) => {
 
   const { userAgent, ip } = getClientMeta(req);
   const tokens = await issueTokens({ user, userAgent, ip, deviceId });
+
   if (user.role === "ADMIN") {
+    console.log(`[AUTH] Admin logged in | id=${user.id} | phone=${user.phone}`);
+
     await createAdminAuditLog({
       req,
       action: "LOGIN",
@@ -101,15 +104,26 @@ export const verifyOtp = asyncHandler(async (req, res) => {
       },
       adminId: user.id,
     });
+  } else {
+    console.log(`[AUTH] User logged in | id=${user.id} | phone=${user.phone}`);
   }
 
   return ok(
     res,
-    { token: tokens.accessToken, refreshToken: tokens.refreshToken },
+    {
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user.id,
+        role: user.role,
+        name: user.name ?? null,
+        email: user.email ?? null,
+        phone: user.phone,
+      },
+    },
     "Login successful",
   );
 });
-
 export const signUp = asyncHandler(async (req, res) => {
   const { name, email, phone } = req.validated.body;
 

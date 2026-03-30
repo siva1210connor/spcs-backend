@@ -13,7 +13,7 @@ import {
   adminEventsUpdateController,
   adminEventsDeleteController,
 } from "../controllers/events.controller.js";
-
+import { eventFormUpload } from "../../middleware/upload.js";
 export const adminEventsRouter = Router();
 
 /**
@@ -21,6 +21,22 @@ export const adminEventsRouter = Router();
  */
 
 adminEventsRouter.get("/", validate(adminListEventsSchema), adminEventsListController);
-adminEventsRouter.post("/", validate(adminCreateEventSchema), adminEventsCreateController);
-adminEventsRouter.put("/:id", validate(adminUpdateEventSchema), adminEventsUpdateController);
+adminEventsRouter.post(
+  "/",
+  eventFormUpload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "attachment", maxCount: 1 },
+  ]),
+  validate(adminCreateEventSchema),
+  adminEventsCreateController
+);
+adminEventsRouter.put(
+  "/:id",
+  eventFormUpload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "attachment", maxCount: 1 },
+  ]),
+  validate(adminUpdateEventSchema),
+  adminEventsUpdateController
+);
 adminEventsRouter.delete("/:id", validate(adminDeleteEventSchema), adminEventsDeleteController);

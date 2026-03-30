@@ -15,12 +15,22 @@ import {
 } from "../controllers/downloads.controller.js";
 
 export const adminDownloadsRouter = Router();
-
+import { downloadUpload } from "../../middleware/upload.js"
 /**
  * Base: {{base_url}}/admin/downloads
  */
 
 adminDownloadsRouter.get("/", validate(adminListDownloadsSchema), adminDownloadsListController);
-adminDownloadsRouter.post("/", validate(adminCreateDownloadSchema), adminDownloadsCreateController);
-adminDownloadsRouter.put("/:id", validate(adminUpdateDownloadSchema), adminDownloadsUpdateController);
-adminDownloadsRouter.delete("/:id", validate(adminDeleteDownloadSchema), adminDownloadsDeleteController);
+adminDownloadsRouter.post(
+  "/",
+  downloadUpload.single("file"),
+  validate(adminCreateDownloadSchema),
+  adminDownloadsCreateController
+);
+adminDownloadsRouter.put(
+  "/:id",
+  downloadUpload.single("file"),
+  validate(adminUpdateDownloadSchema),
+  adminDownloadsUpdateController
+);
+adminDownloadsRouter.delete("/:id", validate(adminDeleteDownloadSchema), adminDownloadsDeleteController); 

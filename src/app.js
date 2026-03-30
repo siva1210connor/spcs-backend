@@ -13,6 +13,7 @@ export function createApp() {
   // Request logging
   app.use(httpLogger);
 
+  app.set("trust proxy", 1);
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   // Body parsing
@@ -26,7 +27,7 @@ export function createApp() {
   securityMiddleware(app);
 
   // Global rate limiting
-  app.use(globalRateLimiter);
+  // app.use(globalRateLimiter);
 
   // Routes
   app.use("/api", apiRouter);

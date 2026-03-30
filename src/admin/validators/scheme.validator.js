@@ -10,19 +10,21 @@ const nullableUrl = () =>
 const schemeStatusSchema = z
   .string()
   .transform((v) => v.toUpperCase())
-  .refine((v) => ["ACTIVE", "INACTIVE"].includes(v), "status must be ACTIVE or INACTIVE");
-
+  .refine((v) => ["ACTIVE", "INACTIVE"].includes(v), {
+    message: "status must be ACTIVE or INACTIVE",
+  });
 export const adminListSchemeSchema = z.object({
-  query: z.object({
-    search: z.string().optional().transform((v) => v?.trim()),
-  }).optional(),
+  query: z
+    .object({
+      search: z.string().optional().transform((v) => v?.trim()),
+    })
+    .optional(),
 });
 
 export const adminCreateSchemeSchema = z.object({
   body: z.object({
-    title: z.string().min(1, "title is required").max(250),
-    description: nullableString(5000),
-    scheme_image: nullableUrl(),
+    title: z.string().trim().min(1, "title is required").max(250),
+    description: nullableString(5000).optional(),
     status: schemeStatusSchema.optional(),
   }),
 });
@@ -31,16 +33,11 @@ export const adminUpdateSchemeSchema = z.object({
   params: z.object({
     id: z.string().min(1, "id is required"),
   }),
-  body: z
-    .object({
-      title: z.string().min(1).max(250).optional(),
-      description: nullableString(5000),
-      scheme_image: nullableUrl(),
-      status: schemeStatusSchema.optional(),
-    })
-    .refine((body) => Object.keys(body).length > 0, {
-      message: "At least one field must be provided",
-    }),
+  body: z.object({
+    title: z.string().trim().min(1).max(250).optional(),
+    description: nullableString(5000).optional(),
+    status: schemeStatusSchema.optional(),
+  }),
 });
 
 export const adminDeleteSchemeSchema = z.object({

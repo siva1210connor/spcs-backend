@@ -20,4 +20,8 @@ export const adminReviewsRouter = Router();
 
 adminReviewsRouter.get("/", validate(adminListReviewsSchema), adminReviewsListController);
 adminReviewsRouter.put("/:id", validate(adminUpdateReviewSchema), adminReviewsUpdateController);
-adminReviewsRouter.delete("/:id", validate(adminDeleteReviewSchema), adminReviewsDeleteController);
+adminReviewsRouter.delete(
+  "/:id",
+  validate(adminDeleteReviewSchema),
+  adminReviewsDeleteController
+);

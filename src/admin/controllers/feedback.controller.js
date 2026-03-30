@@ -15,7 +15,7 @@ export const adminFeedbackListController = asyncHandler(async (req, res) => {
 export const adminFeedbackReplyController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
   const { message } = req.validated.body;
-  const data = await adminReplyFeedback({ req,id, message });
+  const data = await adminReplyFeedback({ req, id, message });
   return ok(res, data, data.msg);
 });
 

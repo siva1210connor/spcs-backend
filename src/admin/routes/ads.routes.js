@@ -13,7 +13,7 @@ import {
   adminAdsUpdateController,
   adminAdsDeleteController,
 } from "../controllers/ads.controller.js";
-
+import { adUpload } from "../../middleware/upload.js";
 export const adminAdsRouter = Router();
 
 /**
@@ -21,6 +21,11 @@ export const adminAdsRouter = Router();
  */
 
 adminAdsRouter.get("/", validate(adminListAdsSchema), adminAdsListController);
-adminAdsRouter.post("/", validate(adminCreateAdSchema), adminAdsCreateController);
+adminAdsRouter.post(
+  "/",
+  adUpload.single("image"),
+  validate(adminCreateAdSchema),
+  adminAdsCreateController
+);
 adminAdsRouter.put("/:id", validate(adminUpdateAdSchema), adminAdsUpdateController);
 adminAdsRouter.delete("/:id", validate(adminDeleteAdSchema), adminAdsDeleteController);

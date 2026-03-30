@@ -37,6 +37,7 @@ function buildWhere({ search, from_date, to_date }) {
     where.OR = [
       { email: { contains: search, mode: "insensitive" } },
       { title: { contains: search, mode: "insensitive" } },
+      { description: { contains: search, mode: "insensitive" } },
       { user: { name: { contains: search, mode: "insensitive" } } },
     ];
   }
@@ -47,9 +48,9 @@ function buildWhere({ search, from_date, to_date }) {
 function mapFeedbackRow(row) {
   return {
     id: row.id,
-    name: row.user?.name ?? null,
+    name: row.user?.name ?? "Unknown User",
     email: row.email ?? row.user?.email ?? null,
-    title: row.title ?? null,
+    title: row.title ?? "No subject",
     description: row.description,
     feedback_date: row.createdAt,
     user_id: row.userId ?? null,
@@ -98,7 +99,7 @@ export async function adminListFeedback({ query }) {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.max(1, Math.ceil(total / limit)),
     };
   } catch (err) {
     throw makeError(
@@ -203,13 +204,22 @@ export async function adminDeleteFeedback({ req, id }) {
         replyText: true,
         repliedAt: true,
         createdAt: true,
+        user: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
     if (!existing) {
       throw makeError("Feedback not found", 404, "ADMIN_FEEDBACK_NOT_FOUND");
     }
-    await prisma.feedback.delete({ where: { id } });
+
+    await prisma.feedback.delete({
+      where: { id },
+    });
 
     await createAdminAuditLog({
       req,
@@ -217,11 +227,11 @@ export async function adminDeleteFeedback({ req, id }) {
       resourceType: AUDIT_RESOURCE_TYPES.FEEDBACK,
       resourceId: existing.id,
       message: "Feedback deleted",
-      beforeJson: existing,
+      beforeJson: mapFeedbackRow(existing),
       afterJson: null,
     });
 
-    return { msg: "deleted successfully" };
+    return { msg: "Feedback deleted successfully" };
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError(
@@ -231,6 +241,11 @@ export async function adminDeleteFeedback({ req, id }) {
         err,
       );
     }
+
+    if (err?.statusCode || err?.status) {
+      throw err;
+    }
+
     throw makeError(
       "Failed to delete feedback",
       500,

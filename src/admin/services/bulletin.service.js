@@ -10,42 +10,90 @@ function makeError(message, statusCode, code, cause) {
   if (cause) err.cause = cause;
   return err;
 }
+function formatFileSize(size) {
+  if (size === null || size === undefined || size === "") return null;
 
+  const bytes = Number(size);
+  if (Number.isNaN(bytes) || bytes < 0) return null;
+
+  if (bytes < 1024) return `${bytes} B`;
+
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+
+  const gb = mb / 1024;
+  return `${gb.toFixed(1)} GB`;
+}
 function mapBulletinRow(row) {
+  const dateObj = row.date ? new Date(row.date) : null;
+
+  const formattedTitle = dateObj
+    ? dateObj.toLocaleString("en-US", {
+      month: "long",
+      year: "numeric",
+    })
+    : row.title;
+
+  const formattedFileType = row.fileType
+    ? row.fileType === "application/pdf"
+      ? "PDF"
+      : row.fileType
+    : null;
+
+  const formattedFileSize = formatFileSize(row.fileSize);
+
   return {
     id: row.id,
-    title: row.title,
-    bulletin_image_url: row.imageUrl ?? null,
+    title: formattedTitle,
+    cover_image_url: row.imageUrl ?? null,
     date: row.date,
-    file_url: row.fileUrl,
-    file_type: row.fileType ?? null,
-    file_size: row.fileSize ?? null,
+    pdf_url: row.fileUrl,
+    file_type: formattedFileType,
+    file_size: formattedFileSize,
   };
 }
 
 export async function adminListBulletin({ query } = {}) {
   try {
+    const page = query?.page ?? 1;
+    const limit = query?.limit ?? 10;
+    const skip = (page - 1) * limit;
+
     const where = query?.search
       ? {
-          title: { contains: query.search, mode: "insensitive" },
-        }
+        title: { contains: query.search, mode: "insensitive" },
+      }
       : {};
 
-    const rows = await prisma.bulletin.findMany({
-      where,
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        title: true,
-        imageUrl: true,
-        date: true,
-        fileUrl: true,
-        fileType: true,
-        fileSize: true,
-      },
-    });
+    const [total, rows] = await Promise.all([
+      prisma.bulletin.count({ where }),
+      prisma.bulletin.findMany({
+        where,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          imageUrl: true,
+          date: true,
+          fileUrl: true,
+          fileType: true,
+          fileSize: true,
+        },
+      }),
+    ]);
 
-    return rows.map(mapBulletinRow);
+    return {
+      items: rows.map(mapBulletinRow),
+      page,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+    };
   } catch (err) {
     throw makeError(
       "Failed to fetch bulletin",
@@ -56,16 +104,66 @@ export async function adminListBulletin({ query } = {}) {
   }
 }
 
-export async function adminCreateBulletin({ req, input }) {
+export async function adminCreateBulletin({ req, input, files }) {
   try {
+    const coverImage = files?.cover_image?.[0] ?? null;
+    const bulletinPdf = files?.bulletin_pdf?.[0] ?? null;
+
+    if (!coverImage) {
+      throw makeError(
+        "cover_image is required",
+        400,
+        "ADMIN_BULLETIN_COVER_IMAGE_REQUIRED"
+      );
+    }
+
+    if (!bulletinPdf) {
+      throw makeError(
+        "bulletin_pdf is required",
+        400,
+        "ADMIN_BULLETIN_PDF_REQUIRED"
+      );
+    }
+
+    const monthMap = {
+      january: 0,
+      february: 1,
+      march: 2,
+      april: 3,
+      may: 4,
+      june: 5,
+      july: 6,
+      august: 7,
+      september: 8,
+      october: 9,
+      november: 10,
+      december: 11,
+    };
+
+    const normalizedMonth = input.month.trim().toLowerCase();
+    const monthIndex = monthMap[normalizedMonth];
+
+    if (monthIndex === undefined) {
+      throw makeError(
+        "Invalid month",
+        400,
+        "ADMIN_BULLETIN_INVALID_MONTH"
+      );
+    }
+
+    const bulletinDate = new Date(input.year, monthIndex, 1);
+
+    const coverImageUrl = `/uploads/bulletins/${coverImage.filename}`;
+    const bulletinPdfUrl = `/uploads/bulletins/${bulletinPdf.filename}`;
+
     const created = await prisma.bulletin.create({
       data: {
-        title: input.title,
-        imageUrl: input.bulletin_image_url ?? null,
-        date: new Date(input.date),
-        fileUrl: input.file_url,
-        fileType: input.file_type ?? null,
-        fileSize: input.file_size ?? null,
+        title: input.title.trim(),
+        imageUrl: coverImageUrl,
+        date: bulletinDate,
+        fileUrl: bulletinPdfUrl,
+        fileType: bulletinPdf.mimetype ?? null,
+        fileSize: bulletinPdf.size ? String(bulletinPdf.size) : null,
       },
       select: {
         id: true,
@@ -82,6 +180,7 @@ export async function adminCreateBulletin({ req, input }) {
       msg: "created successfully",
       item: mapBulletinRow(created),
     };
+
     await createAdminAuditLog({
       req,
       action: "CREATE",
@@ -91,8 +190,11 @@ export async function adminCreateBulletin({ req, input }) {
       beforeJson: null,
       afterJson: mapBulletinRow(created),
     });
+
     return response;
   } catch (err) {
+    if (err?.code && err?.statusCode) throw err;
+
     throw makeError(
       "Failed to create bulletin",
       500,
@@ -102,7 +204,7 @@ export async function adminCreateBulletin({ req, input }) {
   }
 }
 
-export async function adminUpdateBulletin({ req, id, input }) {
+export async function adminUpdateBulletin({ req, id, input, files }) {
   try {
     const existing = await prisma.bulletin.findUnique({
       where: { id },
@@ -116,17 +218,71 @@ export async function adminUpdateBulletin({ req, id, input }) {
         fileSize: true,
       },
     });
-    const data = {};
 
-    if (input.title !== undefined) data.title = input.title;
-    if (Object.prototype.hasOwnProperty.call(input, "bulletin_image_url"))
-      data.imageUrl = input.bulletin_image_url;
-    if (input.date !== undefined) data.date = new Date(input.date);
-    if (input.file_url !== undefined) data.fileUrl = input.file_url;
-    if (Object.prototype.hasOwnProperty.call(input, "file_type"))
-      data.fileType = input.file_type;
-    if (Object.prototype.hasOwnProperty.call(input, "file_size"))
-      data.fileSize = input.file_size;
+    if (!existing) {
+      throw makeError(
+        "Bulletin not found",
+        404,
+        "ADMIN_BULLETIN_NOT_FOUND"
+      );
+    }
+
+    const data = {};
+    const coverImage = files?.cover_image?.[0] ?? null;
+    const bulletinPdf = files?.bulletin_pdf?.[0] ?? null;
+
+    if (input.title !== undefined) {
+      data.title = input.title.trim();
+    }
+
+    const monthMap = {
+      january: 0,
+      february: 1,
+      march: 2,
+      april: 3,
+      may: 4,
+      june: 5,
+      july: 6,
+      august: 7,
+      september: 8,
+      october: 9,
+      november: 10,
+      december: 11,
+    };
+
+    if (input.year !== undefined || input.month !== undefined) {
+      const existingDate = existing.date ? new Date(existing.date) : new Date();
+
+      const finalYear =
+        input.year !== undefined ? input.year : existingDate.getFullYear();
+
+      const finalMonthName =
+        input.month !== undefined
+          ? input.month.trim().toLowerCase()
+          : existingDate.toLocaleString("en-US", { month: "long" }).toLowerCase();
+
+      const monthIndex = monthMap[finalMonthName];
+
+      if (monthIndex === undefined) {
+        throw makeError(
+          "Invalid month",
+          400,
+          "ADMIN_BULLETIN_INVALID_MONTH"
+        );
+      }
+
+      data.date = new Date(finalYear, monthIndex, 1);
+    }
+
+    if (coverImage) {
+      data.imageUrl = `/uploads/bulletins/${coverImage.filename}`;
+    }
+
+    if (bulletinPdf) {
+      data.fileUrl = `/uploads/bulletins/${bulletinPdf.filename}`;
+      data.fileType = bulletinPdf.mimetype ?? null;
+      data.fileSize = bulletinPdf.size ? String(bulletinPdf.size) : null;
+    }
 
     const updated = await prisma.bulletin.update({
       where: { id },
@@ -146,17 +302,25 @@ export async function adminUpdateBulletin({ req, id, input }) {
       msg: "updated successfully",
       item: mapBulletinRow(updated),
     };
-    await createAdminAuditLog({
-      req,
-      action: "UPDATE",
-      resourceType: AUDIT_RESOURCE_TYPES.BULLETIN,
-      resourceId: existing.id,
-      message: "Bulletin updated",
-      beforeJson: mapBulletinRow(existing),
-      afterJson: response.item,
-    });
+
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "UPDATE",
+        resourceType: AUDIT_RESOURCE_TYPES.BULLETIN,
+        resourceId: existing.id,
+        message: "Bulletin updated",
+        beforeJson: mapBulletinRow(existing),
+        afterJson: response.item,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on bulletin update:", auditErr);
+    }
+
     return response;
   } catch (err) {
+    if (err?.code && err?.statusCode) throw err;
+
     if (err?.code === "P2025") {
       throw makeError(
         "Bulletin not found",
@@ -165,6 +329,7 @@ export async function adminUpdateBulletin({ req, id, input }) {
         err,
       );
     }
+
     throw makeError(
       "Failed to update bulletin",
       500,
@@ -188,6 +353,13 @@ export async function adminDeleteBulletin({ req, id }) {
         fileSize: true,
       },
     });
+    if (!existing) {
+      throw makeError(
+        "Bulletin not found",
+        404,
+        "ADMIN_BULLETIN_NOT_FOUND"
+      );
+    }
     await prisma.bulletin.delete({
       where: { id },
     });
@@ -196,17 +368,22 @@ export async function adminDeleteBulletin({ req, id }) {
       msg: "deleted successfully",
     };
 
-    await createAdminAuditLog({
-      req,
-      action: "DELETE",
-      resourceType: AUDIT_RESOURCE_TYPES.BULLETIN,
-      resourceId: existing.id,
-      message: "Bulletin deleted",
-      beforeJson: mapBulletinRow(existing),
-      afterJson: null,
-    });
+    try {
+      await createAdminAuditLog({
+        req,
+        action: "DELETE",
+        resourceType: AUDIT_RESOURCE_TYPES.BULLETIN,
+        resourceId: existing.id,
+        message: "Bulletin deleted",
+        beforeJson: mapBulletinRow(existing),
+        afterJson: null,
+      });
+    } catch (auditErr) {
+      console.error("Admin audit log failed on bulletin delete:", auditErr);
+    }
     return response;
   } catch (err) {
+    if (err?.code && err?.statusCode) throw err;
     if (err?.code === "P2025") {
       throw makeError(
         "Bulletin not found",

@@ -9,18 +9,26 @@ import {
 } from "../services/scheme.service.js";
 
 export const adminSchemeListController = asyncHandler(async (req, res) => {
-  const data = await adminListScheme({ query: req.validated.query });
+  const data = await adminListScheme({ query: req.validated?.query || {} });
   return ok(res, data, "Scheme fetched");
 });
 
 export const adminSchemeCreateController = asyncHandler(async (req, res) => {
-  const data = await adminCreateScheme({ req, input: req.validated.body });
+  const data = await adminCreateScheme({
+    req,
+    input: req.validated.body,
+  });
+
   return ok(res, data, data.msg);
 });
 
 export const adminSchemeUpdateController = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
-  const data = await adminUpdateScheme({ req, id, input: req.validated.body });
+  const data = await adminUpdateScheme({
+    req,
+    id,
+    input: req.validated.body || {},
+  });
   return ok(res, data, data.msg);
 });
 

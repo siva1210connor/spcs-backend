@@ -13,7 +13,7 @@ import {
   adminBulletinUpdateController,
   adminBulletinDeleteController,
 } from "../controllers/bulletin.controller.js";
-
+import { bulletinUpload } from "../../middleware/upload.js";
 export const adminBulletinRouter = Router();
 
 /**
@@ -21,6 +21,22 @@ export const adminBulletinRouter = Router();
  */
 
 adminBulletinRouter.get("/", validate(adminListBulletinSchema), adminBulletinListController);
-adminBulletinRouter.post("/", validate(adminCreateBulletinSchema), adminBulletinCreateController);
-adminBulletinRouter.put("/:id", validate(adminUpdateBulletinSchema), adminBulletinUpdateController);
+adminBulletinRouter.post(
+  "/",
+  bulletinUpload.fields([
+    { name: "cover_image", maxCount: 1 },
+    { name: "bulletin_pdf", maxCount: 1 },
+  ]),
+  validate(adminCreateBulletinSchema),
+  adminBulletinCreateController
+);
+adminBulletinRouter.put(
+  "/:id",
+  bulletinUpload.fields([
+    { name: "cover_image", maxCount: 1 },
+    { name: "bulletin_pdf", maxCount: 1 },
+  ]),
+  validate(adminUpdateBulletinSchema),
+  adminBulletinUpdateController
+);
 adminBulletinRouter.delete("/:id", validate(adminDeleteBulletinSchema), adminBulletinDeleteController);

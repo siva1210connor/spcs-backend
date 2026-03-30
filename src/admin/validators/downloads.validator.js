@@ -6,16 +6,12 @@ const nullableString = (max = 500) =>
 
 export const adminListDownloadsSchema = z.object({
   query: z.object({
-    search: z.string().optional().transform((v) => v?.trim()),
-  }).optional(),
+    search: z.string().trim().optional(),
+  }).default({}),
 });
-
 export const adminCreateDownloadSchema = z.object({
   body: z.object({
-    title: z.string().min(1, "title is required").max(250),
-    file_url: z.string().url("file_url must be a valid URL"),
-    file_type: nullableString(100),
-    file_size: nullableString(100),
+    title: z.string().trim().min(1, "title is required").max(250),
   }),
 });
 
@@ -23,16 +19,9 @@ export const adminUpdateDownloadSchema = z.object({
   params: z.object({
     id: z.string().min(1, "id is required"),
   }),
-  body: z
-    .object({
-      title: z.string().min(1).max(250).optional(),
-      file_url: z.string().url("file_url must be a valid URL").optional(),
-      file_type: nullableString(100),
-      file_size: nullableString(100),
-    })
-    .refine((body) => Object.keys(body).length > 0, {
-      message: "At least one field must be provided",
-    }),
+  body: z.object({
+    title: z.string().trim().min(1).max(250).optional(),
+  }),
 });
 
 export const adminDeleteDownloadSchema = z.object({

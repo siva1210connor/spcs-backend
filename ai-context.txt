@@ -1,0 +1,858 @@
+========== EMERALD REPLACE @ 2026-03-28T11:46:27.818Z ==========
+
+===== FILE: prisma/schema.prisma =====
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum BookType {
+  HARD_COPY
+  EBOOK
+  AUDIOBOOK
+}
+
+enum BookStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ContentType {
+  NEWS
+  EVENTS
+}
+
+enum OrderStatus {
+  PENDING
+  FULFILLED
+  SHIPPED
+  COMPLETED
+  REFUNDED
+  CANCELLED
+}
+
+enum OrderType {
+  BOOK
+  EBOOK
+  AUDIOBOOK
+}
+
+enum RuleType {
+  DISCOUNT
+  SHIPPING
+}
+
+enum AdType {
+  SQUARE
+  BANNER
+}
+
+enum AwardType {
+  AKSHARAPURASKARAM
+  AWARDED
+}
+
+enum ReviewStatus {
+  PENDING
+  ACTIVE
+  PUBLISHED
+  REJECTED
+}
+
+enum SchemeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum MediaType {
+  IMAGE
+  DOCUMENT
+  AUDIO
+  OTHER
+}
+
+enum StorageProvider {
+  LOCAL
+  S3
+  R2
+  MINIO
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  UPLOAD
+  STATUS_CHANGE
+  REFUND
+}
+
+model AdminAuditLog {
+  id String @id @default(cuid())
+
+  adminId String?
+  admin   User?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  action       AuditAction
+  resourceType String
+  resourceId   String?
+  message      String?
+
+  beforeJson Json?
+  afterJson  Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+}
+
+model User {
+  id       String   @id @default(cuid())
+  name     String?
+  email    String?  @unique
+  phone    String   @unique
+  password String?
+  role     Role     @default(USER)
+  profile  Profile?
+
+  cart     Cart?
+  wishlist Wishlist?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens     RefreshToken[]
+  orders            Order[]
+  feedbacks         Feedback[]
+  reviews           Review[]
+  schemeEnrollments SchemeEnrollment[]
+  mediaAssets       MediaAsset[]
+
+  adminAuditLogs AdminAuditLog[]
+}
+
+model Profile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  state      String?
+  city       String?
+  district   String?
+  country    String?
+  addressOne String?
+  addressTwo String?
+  pincode    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([city])
+  @@index([state])
+  @@index([pincode])
+}
+
+model RefreshToken {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String // store hashed refresh token
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  userAgent String?
+  ip        String?
+  deviceId  String?
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  books     Book[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Book {
+  id              String    @id @default(cuid())
+  name            String
+  malayalamName   String?
+  author          String
+  authorMalayalam String?
+  type            BookType
+  bestSeller      Boolean   @default(false)
+  newArrival      Boolean   @default(false)
+  awardWinner     Boolean   @default(false)
+  republication   Boolean   @default(false)
+  highlight       Boolean   @default(false)
+  rank            String?
+  description     String?
+  edition         String?
+  isbn            String?
+  numOfPages      String?
+  publisher       String?
+  language        String?
+  price           Decimal   @db.Decimal(10, 2)
+  discountId      String?
+  discount        Discount? @relation(fields: [discountId], references: [id])
+
+  status BookStatus @default(ACTIVE)
+
+  unlimitedStock Boolean @default(false)
+  stock          Int     @default(0)
+
+  coverImageUrl String?
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
+  reviews       Review[]
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  orderItems OrderItem[]
+
+  @@index([discountId])
+  @@index([categoryId])
+  @@index([type])
+  @@index([bestSeller])
+  @@index([newArrival])
+  @@index([status])
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id     String @id @default(cuid())
+  cartId String
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id])
+
+  quantity Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, bookId])
+  @@index([bookId])
+}
+
+model Wishlist {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WishlistItem[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model WishlistItem {
+  id         String   @id @default(cuid())
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([wishlistId, bookId])
+  @@index([bookId])
+}
+
+model Slider {
+  id           String   @id @default(cuid())
+  title        String?
+  sliderImgUrl String
+  sliderUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model Notification {
+  id String @id @default(cuid())
+
+  title                String
+  description          String?
+  notificationImageUrl String?
+  notificationUrl      String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([isActive])
+}
+
+model Branch {
+  id String @id @default(cuid())
+
+  branch_name    String
+  branch_address String?
+  phone          String?
+  map_url        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branch_name])
+  @@index([createdAt])
+}
+
+model Discount {
+  id            String   @id @default(cuid())
+  discountCode  String   @unique
+  discountPrice Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  books         Book[]
+  orders        Order[]
+}
+
+model EventItem {
+  id          String      @id @default(cuid())
+  type        ContentType
+  title       String
+  date        DateTime
+  time        String?
+  location    String?
+  description String?
+  imageUrl    String?
+  fileLink    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([type, date])
+}
+
+model Feedback {
+  id          String  @id @default(cuid())
+  title       String?
+  description String
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  email     String?
+  replyText String?
+  repliedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([email])
+}
+
+model Order {
+  id      String  @id @default(cuid())
+  orderNo String? @unique
+  userId  String?
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  type   OrderType   @default(BOOK)
+  status OrderStatus @default(PENDING)
+
+  transactionId String? @unique
+
+  subtotal       Decimal @default(0.00) @db.Decimal(10, 2)
+  shippingCharge Decimal @default(0.00) @db.Decimal(10, 2)
+
+  discountId String?
+  discount   Discount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+
+  total Decimal @default(0.00) @db.Decimal(10, 2) // subtotal - discount + shipping
+
+  items           OrderItem[]
+  shippingAddress OrderShippingAddress?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, status])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model OrderShippingAddress {
+  id      String @id @default(cuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  name     String?
+  address  String?
+  district String?
+  state    String?
+  pinCode  String?
+
+  createdAt DateTime @default(now())
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id])
+
+  quantity Int     @default(1)
+  price    Decimal @default(0.00) @db.Decimal(10, 2) // snapshot price at purchase time
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([bookId])
+}
+
+model Offer {
+  id            String   @id @default(cuid())
+  title         String?
+  offerImageUrl String
+  link          String?
+  views         Int      @default(0) // optional but recommended
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model Rule {
+  id   String   @id @default(cuid())
+  type RuleType
+
+  fromPrice Decimal @db.Decimal(10, 2)
+  toPrice   Decimal @db.Decimal(10, 2)
+
+  // For DISCOUNT rules only:
+  isPercentage Boolean @default(false)
+
+  // Meaning depends on type:
+  // - DISCOUNT: percentage value (e.g. 10.00) or flat discount (e.g. 50.00)
+  // - SHIPPING: shipping charge (e.g. 40.00)
+  value Decimal @db.Decimal(10, 2)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+  @@index([type, fromPrice, toPrice])
+}
+
+model Ad {
+  id        String   @id @default(cuid())
+  type      AdType
+  imageUrl  String
+  link      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Award {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  type        AwardType
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Download {
+  id        String   @id @default(cuid())
+  title     String
+  fileUrl   String
+  fileType  String?
+  fileSize  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model Catalogue {
+  id           String   @id @default(cuid())
+  title        String
+  fileUrl      String
+  fileType     String?
+  fileSize     String?
+  uploadedDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([uploadedDate])
+  @@index([createdAt])
+}
+
+model Archive {
+  id           String   @id @default(cuid())
+  title        String
+  fileUrl      String
+  fileType     String?
+  uploadedDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([uploadedDate])
+  @@index([createdAt])
+}
+
+model Bulletin {
+  id        String   @id @default(cuid())
+  title     String
+  imageUrl  String?
+  date      DateTime
+  fileUrl   String
+  fileType  String?
+  fileSize  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([createdAt])
+}
+
+model Review {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  description String
+  rating      Int
+  status      ReviewStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([rating])
+  @@index([createdAt])
+  @@index([bookId])
+  @@index([userId])
+}
+
+model Scheme {
+  id             String       @id @default(cuid())
+  title          String
+  description    String?
+  schemeImageUrl String?
+  status         SchemeStatus @default(ACTIVE)
+
+  enrollments SchemeEnrollment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SchemeEnrollment {
+  id       String @id @default(cuid())
+  schemeId String
+  scheme   Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([schemeId, userId])
+  @@index([schemeId])
+  @@index([userId])
+}
+
+model GalleryAlbum {
+  id        String    @id @default(cuid())
+  name      String
+  galleries Gallery[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([createdAt])
+}
+
+model Gallery {
+  id      String       @id @default(cuid())
+  albumId String
+  album   GalleryAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  images GalleryImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([albumId])
+  @@index([createdAt])
+}
+
+model GalleryImage {
+  id        String  @id @default(cuid())
+  galleryId String
+  gallery   Gallery @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  imageUrl  String
+  sortOrder Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([galleryId])
+}
+
+model MediaAsset {
+  id           String          @id @default(cuid())
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  mediaType    MediaType
+  provider     StorageProvider
+  storageKey   String
+  publicUrl    String
+  module       String?
+
+  uploadedById String?
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([uploadedById])
+  @@index([module])
+  @@index([createdAt])
+}
+
+===== FILE: src/middleware/upload.factory.js =====
+import fs from "fs";
+import path from "path";
+import multer from "multer";
+import { fileURLToPath } from "url";
+import { makeError } from "../utils/error.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../../");
+
+function sanitizeFileName(name) {
+  return name.replace(/[^a-zA-Z0-9-_]/g, "_");
+}
+
+export function createUploader({
+  folder = "misc",
+  allowedMimeTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"],
+  maxFileSize = 30 * 1024 * 1024,
+} = {}) {
+  const uploadDir = path.join(projectRoot, "uploads", folder);
+
+  fs.mkdirSync(uploadDir, { recursive: true });
+
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      const baseName = sanitizeFileName(
+        path.basename(file.originalname, ext)
+      );
+      const uniqueName = `${Date.now()}-${baseName}${ext}`;
+      cb(null, uniqueName);
+    },
+  });
+
+  const fileFilter = (req, file, cb) => {
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      return cb(
+        makeError(
+          "Invalid file type",
+          400,
+          "INVALID_FILE_TYPE"
+        ),
+        false
+      );
+    }
+    cb(null, true);
+  };
+
+  return multer({
+    storage,
+    fileFilter,
+    limits: {
+      fileSize: maxFileSize,
+    },
+  });
+}
+
+===== FILE: src/middleware/upload.js =====
+import { createUploader } from "./upload.factory.js";
+
+export const sliderUpload = createUploader({
+  folder: "slider",
+});
+export const notificationUpload = createUploader({
+  folder: "notifications",
+});
+
+export const bulletinUpload = createUploader({
+  folder: "bulletins",
+  allowedMimeTypes: [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+  ],
+  maxFileSize: 30 * 1024 * 1024,
+});
+
+export const catalogueUpload = createUploader({
+  folder: "catalogues",
+  allowedMimeTypes: ["application/pdf"],
+  maxFileSize: 50 * 1024 * 1024,
+});
+
+export const archiveUpload = createUploader({
+  folder: "archives",
+  allowedMimeTypes: [
+    "application/pdf",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/csv",
+  ],
+  maxFileSize: 50 * 1024 * 1024,
+});
+
+export const awardUpload = createUploader({
+  folder: "awards",
+  allowedMimeTypes: ["image/jpeg", "image/jpg", "image/png", "image/webp"],
+  maxFileSize: 10 * 1024 * 1024,
+});
+
+export const offerUpload = createUploader({
+  folder: "offers",
+  allowedMimeTypes: ["image/jpeg", "image/jpg", "image/png", "image/webp"],
+  maxFileSize: 10 * 1024 * 1024,
+});
+
+export const schemeUpload = createUploader({
+  folder: "schemes",
+  allowedMimeTypes: ["image/jpeg", "image/jpg", "image/png", "image/webp"],
+  maxFileSize: 10 * 1024 * 1024,
+});
+export const eventImageUpload = createUploader({
+  folder: "events",
+  allowedMimeTypes: ["image/jpeg", "image/jpg", "image/png", "image/webp"],
+  maxFileSize: 10 * 1024 * 1024,
+});
+
+export const eventAttachmentUpload = createUploader({
+  folder: "event-attachments",
+  allowedMimeTypes: ["application/pdf"],
+  maxFileSize: 5 * 1024 * 1024,
+});
+
+import multer from "multer";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { makeError } from "../utils/error.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../../");
+
+// create folders
+const eventsDir = path.join(projectRoot, "uploads", "events");
+const attachmentsDir = path.join(projectRoot, "uploads", "event-attachments");
+
+fs.mkdirSync(eventsDir, { recursive: true });
+fs.mkdirSync(attachmentsDir, { recursive: true });
+
+// storage logic
+const eventStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (file.fieldname === "image") return cb(null, eventsDir);
+    if (file.fieldname === "attachment") return cb(null, attachmentsDir);
+
+    return cb(makeError("Invalid upload field", 400, "INVALID_UPLOAD_FIELD"));
+  },
+
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = file.originalname.replace(/[^a-zA-Z0-9]/g, "_");
+    cb(null, `${Date.now()}-${name}${ext}`);
+  },
+});
+
+// file filter
+const eventFileFilter = (req, file, cb) => {
+  if (file.fieldname === "image") {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(makeError("Invalid image type", 400), false);
+    }
+  }
+
+  if (file.fieldname === "attachment") {
+    if (file.mimetype !== "application/pdf") {
+      return cb(makeError("Only PDF allowed", 400), false);
+    }
+  }
+
+  cb(null, true);
+};
+
+// ✅ THIS IS THE IMPORTANT ONE
+export const eventFormUpload = multer({
+  storage: eventStorage,
+  fileFilter: eventFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 },
+});

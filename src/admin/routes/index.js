@@ -19,29 +19,27 @@ import { adminFeedbackRouter } from "./feedback.routes.js";
 import { adminReviewsRouter } from "./reviews.routes.js";
 import { adminSchemeRouter } from "./scheme.routes.js";
 import { adminGalleryRouter } from "./gallery.routes.js";
-import { adminUploadRouter } from "../../upload/index.js";
 import { adminAuditLogsRouter } from "./audit-logs.routes.js";
 
 export const adminRouter = Router();
 
-adminRouter.use("/me", adminMeRouter);
-adminRouter.use("/dashboard", adminDashboardRouter);
-adminRouter.use("/book", adminBooksRouter);
-adminRouter.use("/categories", adminCategoriesRouter);
-adminRouter.use("/orders", adminOrdersRouter);
-adminRouter.use("/customers", adminCustomersRouter);
-adminRouter.use("/offers", adminOffersRouter);
+adminRouter.use("/me", adminMeRouter); //done
+adminRouter.use("/dashboard", adminDashboardRouter); // done
+adminRouter.use("/books", adminBooksRouter); //done
+adminRouter.use("/categories", adminCategoriesRouter); //done
+adminRouter.use("/orders", adminOrdersRouter); //done
+adminRouter.use("/customers", adminCustomersRouter); //done
+adminRouter.use("/offers", adminOffersRouter); //done
 adminRouter.use("/rules", adminRulesRouter);
 adminRouter.use("/events", adminEventsRouter);
 adminRouter.use("/ads", adminAdsRouter);
-adminRouter.use("/awards", adminAwardsRouter);
-adminRouter.use("/downloads", adminDownloadsRouter);
-adminRouter.use("/catalogue", adminCatalogueRouter);
+adminRouter.use("/awards", adminAwardsRouter); //done
+adminRouter.use("/downloads", adminDownloadsRouter); //done
+adminRouter.use("/catalogue", adminCatalogueRouter); //done
 adminRouter.use("/archives", adminArchivesRouter);
-adminRouter.use("/bulletin", adminBulletinRouter);
+adminRouter.use("/bulletin", adminBulletinRouter); // done
 adminRouter.use("/feedback", adminFeedbackRouter);
-adminRouter.use("/reviews", adminReviewsRouter);
-adminRouter.use("/scheme", adminSchemeRouter);
+adminRouter.use("/reviews", adminReviewsRouter); //done 
+adminRouter.use("/scheme", adminSchemeRouter);//done
 adminRouter.use("/gallery", adminGalleryRouter);
-adminRouter.use("/uploads", adminUploadRouter);
 adminRouter.use("/audit-logs", adminAuditLogsRouter);

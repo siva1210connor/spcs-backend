@@ -302,6 +302,38 @@ model Slider {
   @@index([createdAt])
 }
 
+model Notification {
+  id String @id @default(cuid())
+
+  title                String
+  description          String?
+  notificationImageUrl String?
+  notificationUrl      String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([isActive])
+}
+
+model Branch {
+  id String @id @default(cuid())
+
+  branch_name    String
+  branch_address String?
+  phone          String?
+  map_url        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branch_name])
+  @@index([createdAt])
+}
+
 model Discount {
   id            String   @id @default(cuid())
   discountCode  String   @unique
@@ -318,6 +350,7 @@ model EventItem {
   title       String
   date        DateTime
   time        String?
+  location    String?
   description String?
   imageUrl    String?
   fileLink    String?
@@ -410,8 +443,10 @@ model OrderItem {
 
 model Offer {
   id            String   @id @default(cuid())
+  title         String?
   offerImageUrl String
   link          String?
+  views         Int      @default(0) // optional but recommended
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -544,11 +579,11 @@ model Review {
 }
 
 model Scheme {
-  id          String       @id @default(cuid())
-  title       String
-  description String?
-  imageUrl    String?
-  status      SchemeStatus @default(ACTIVE)
+  id             String       @id @default(cuid())
+  title          String
+  description    String?
+  schemeImageUrl String?
+  status         SchemeStatus @default(ACTIVE)
 
   enrollments SchemeEnrollment[]
 
