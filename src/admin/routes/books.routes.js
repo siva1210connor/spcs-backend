@@ -15,11 +15,8 @@ import {
   adminDeleteCategorySchema,
   adminCreateCategorySchema,
 
-
-
-
   // Export
-  adminExportBooksCsvSchema
+  adminExportBooksCsvSchema,
 } from "../validators/books.validator.js";
 import {
   adminBookCategoriesController,
@@ -32,9 +29,10 @@ import {
   adminUpdateCategoryController,
   adminDeleteCategoryController,
   adminCreateCategoryController,
-
-  adminExportBooksCsvController
+  adminExportBooksCsvController,
 } from "../controllers/books.controller.js";
+import { normalizeBookForm } from "../../middleware/normalize-book-form.middleware.js";
+import { bookCoverUpload } from "../../middleware/upload.js";
 
 export const adminBooksRouter = Router();
 
@@ -43,22 +41,46 @@ export const adminBooksRouter = Router();
  */
 
 // list books
-adminBooksRouter.get("/", validate(adminListBooksSchema), adminBookListController);
+adminBooksRouter.get(
+  "/",
+  validate(adminListBooksSchema),
+  adminBookListController,
+);
 // get book details
-adminBooksRouter.get("/:bookId", validate(adminGetBookSchema), adminBookGetController);
+adminBooksRouter.get(
+  "/:bookId",
+  validate(adminGetBookSchema),
+  adminBookGetController,
+);
 
-// create book
-adminBooksRouter.post("/", validate(adminCreateBookSchema), adminBookCreateController);
+//create book
+adminBooksRouter.post(
+  "/",
+  bookCoverUpload.single("cover_image"),
+  normalizeBookForm,
+  validate(adminCreateBookSchema),
+  adminBookCreateController,
+);
 
 // update book
-adminBooksRouter.put("/:bookId", validate(adminUpdateBookSchema), adminBookUpdateController);
+adminBooksRouter.put(
+  "/:bookId",
+  bookCoverUpload.single("cover_image"),
+  normalizeBookForm,
+  validate(adminUpdateBookSchema),
+  adminBookUpdateController,
+);
 
 // delete book
-adminBooksRouter.delete("/:bookId", validate(adminDeleteBookSchema), adminBookDeleteController);
+adminBooksRouter.delete(
+  "/:bookId",
+  validate(adminDeleteBookSchema),
+  adminBookDeleteController,
+);
 
 // export as csv
 adminBooksRouter.get(
   "/export/csv",
   validate(adminExportBooksCsvSchema),
-  adminExportBooksCsvController
+  adminExportBooksCsvController,
 );

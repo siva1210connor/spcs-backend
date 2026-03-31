@@ -7,6 +7,12 @@ export const notificationUpload = createUploader({
   folder: "notifications",
 });
 
+export const bookCoverUpload = createUploader({
+  folder: "books",
+  allowedMimeTypes: ["image/jpeg", "image/jpg", "image/png", "image/webp"],
+  maxFileSize: 10 * 1024 * 1024,
+});
+
 export const bulletinUpload = createUploader({
   folder: "bulletins",
   allowedMimeTypes: [

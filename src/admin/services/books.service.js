@@ -178,7 +178,7 @@ function mapUpdateBodyToData(body, existing) {
       throw makeError(
         "Stock cannot be set when unlimited_stock is true",
         400,
-        "ADMIN_BOOK_INVALID_STOCK_UPDATE"
+        "ADMIN_BOOK_INVALID_STOCK_UPDATE",
       );
     }
 
@@ -205,7 +205,7 @@ export async function adminCreateCategory({ body }) {
       throw makeError(
         "Category already exists",
         409,
-        "ADMIN_CATEGORY_ALREADY_EXISTS"
+        "ADMIN_CATEGORY_ALREADY_EXISTS",
       );
     }
 
@@ -233,7 +233,7 @@ export async function adminCreateCategory({ body }) {
         "Category already exists",
         409,
         "ADMIN_CATEGORY_ALREADY_EXISTS",
-        err
+        err,
       );
     }
 
@@ -241,7 +241,7 @@ export async function adminCreateCategory({ body }) {
       "Failed to create category",
       500,
       "ADMIN_CATEGORY_CREATE_FAILED",
-      err
+      err,
     );
   }
 }
@@ -326,7 +326,11 @@ export async function adminUpdateCategory({ categoryId, body }) {
     });
 
     if (duplicate) {
-      throw makeError("Category name already exists", 409, "ADMIN_CATEGORY_NAME_EXISTS");
+      throw makeError(
+        "Category name already exists",
+        409,
+        "ADMIN_CATEGORY_NAME_EXISTS",
+      );
     }
 
     const updated = await prisma.category.update({
@@ -350,11 +354,21 @@ export async function adminUpdateCategory({ categoryId, body }) {
     if (err?.code && err?.statusCode) throw err;
 
     if (err?.code === "P2025") {
-      throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND", err);
+      throw makeError(
+        "Category not found",
+        404,
+        "ADMIN_CATEGORY_NOT_FOUND",
+        err,
+      );
     }
 
     if (err?.code === "P2002") {
-      throw makeError("Category name already exists", 409, "ADMIN_CATEGORY_NAME_EXISTS", err);
+      throw makeError(
+        "Category name already exists",
+        409,
+        "ADMIN_CATEGORY_NAME_EXISTS",
+        err,
+      );
     }
 
     throw makeError(
@@ -386,7 +400,7 @@ export async function adminDeleteCategory({ categoryId }) {
       throw makeError(
         "Cannot delete category with linked books",
         400,
-        "ADMIN_CATEGORY_HAS_BOOKS"
+        "ADMIN_CATEGORY_HAS_BOOKS",
       );
     }
 
@@ -399,7 +413,12 @@ export async function adminDeleteCategory({ categoryId }) {
     if (err?.code && err?.statusCode) throw err;
 
     if (err?.code === "P2025") {
-      throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND", err);
+      throw makeError(
+        "Category not found",
+        404,
+        "ADMIN_CATEGORY_NOT_FOUND",
+        err,
+      );
     }
 
     throw makeError(
@@ -549,12 +568,18 @@ export async function adminGetBook({ bookId }) {
 
 export async function adminCreateBook({ req, body }) {
   try {
-
-
+    console.log("body.category raw =>", body.category);
+    console.log("body =>", body);
     // Validate category
+    const categoryId = String(body.category ?? "").trim();
+
+    if (!categoryId) {
+      throw makeError("Category is required", 400, "ADMIN_CATEGORY_REQUIRED");
+    }
+
     const category = await prisma.category.findUnique({
-      where: { id: body.category },
-      select: { id: true },
+      where: { id: categoryId },
+      select: { id: true, name: true },
     });
 
     if (!category) {
@@ -587,6 +612,7 @@ export async function adminCreateBook({ req, body }) {
 
     const data = mapCreateBodyToData({
       ...body,
+      category: category.id,
       price: Number(body.price),
     });
 
@@ -623,7 +649,6 @@ export async function adminCreateBook({ req, body }) {
     );
   }
 }
-
 
 export async function adminUpdateBook({ req, bookId, body }) {
   try {
@@ -662,15 +687,24 @@ export async function adminUpdateBook({ req, bookId, body }) {
       throw makeError("Book not found", 404, "ADMIN_BOOK_NOT_FOUND");
 
     // Validate category/discount if provided
-    if (body.category) {
-      const category = await prisma.category.findUnique({
-        where: { id: body.category },
-        select: { id: true },
-      });
-      if (!category)
-        throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND");
-    }
+    if (body.category !== undefined) {
+      const categoryId = String(body.category ?? "").trim();
 
+      if (!categoryId) {
+        throw makeError("Category is required", 400, "ADMIN_CATEGORY_REQUIRED");
+      }
+
+      const category = await prisma.category.findUnique({
+        where: { id: categoryId },
+        select: { id: true, name: true },
+      });
+
+      if (!category) {
+        throw makeError("Category not found", 404, "ADMIN_CATEGORY_NOT_FOUND");
+      }
+
+      body.category = category.id;
+    }
     if (
       Object.prototype.hasOwnProperty.call(body, "discount") &&
       body.discount
@@ -681,6 +715,26 @@ export async function adminUpdateBook({ req, bookId, body }) {
       });
       if (!discount)
         throw makeError("Discount not found", 404, "ADMIN_DISCOUNT_NOT_FOUND");
+    }
+    // Check duplicate ISBN if provided and changed
+    if (Object.prototype.hasOwnProperty.call(body, "isbn")) {
+      const nextIsbn = body.isbn;
+
+      if (nextIsbn) {
+        const duplicateIsbnBook = await prisma.book.findFirst({
+          where: {
+            isbn: nextIsbn,
+            NOT: {
+              id: bookId,
+            },
+          },
+          select: { id: true },
+        });
+
+        if (duplicateIsbnBook) {
+          throw makeError("ISBN already exists", 409, "ADMIN_BOOK_ISBN_EXISTS");
+        }
+      }
     }
 
     const data = mapUpdateBodyToData(body, existing);
@@ -782,7 +836,7 @@ export async function adminDeleteBook({ req, bookId }) {
         "Book cannot be deleted because it is linked to other records",
         400,
         "ADMIN_BOOK_DELETE_CONFLICT",
-        err
+        err,
       );
     }
     if (err?.code === "P2025")
@@ -867,7 +921,7 @@ export async function adminExportBooksCsv({ query }) {
       "Failed to export books csv",
       500,
       "ADMIN_BOOKS_EXPORT_CSV_FAILED",
-      err
+      err,
     );
   }
 }

@@ -1,18 +1,32 @@
 // src/admin/validators/books.validator.js
 import { z } from "zod";
 
+/**
+ * ---------------------------------------------------------
+ * Shared helpers
+ * ---------------------------------------------------------
+ */
+
 const paginationSchema = z.object({
   page: z
     .string()
     .optional()
     .transform((v) => (v ? Number(v) : 1))
-    .refine((n) => Number.isInteger(n) && n >= 1, "page must be an integer >= 1"),
+    .refine(
+      (n) => Number.isInteger(n) && n >= 1,
+      "page must be an integer >= 1",
+    ),
+
   limit: z
     .string()
     .optional()
     .transform((v) => (v ? Number(v) : 10))
-    .refine((n) => Number.isInteger(n) && n >= 1 && n <= 100, "limit must be 1..100"),
+    .refine(
+      (n) => Number.isInteger(n) && n >= 1 && n <= 100,
+      "limit must be 1..100",
+    ),
 });
+
 function parseDDMMYYYY(value) {
   if (!value || typeof value !== "string") return null;
 
@@ -37,63 +51,119 @@ function parseDDMMYYYY(value) {
 
   return date;
 }
+
 const dateSchema = z
   .string()
   .optional()
   .refine(
     (v) => !v || /^\d{2}-\d{2}-\d{4}$/.test(v),
-    "date must be DD-MM-YYYY"
-  );
-// export const filterSchema = z.enum([
-//   "all_books",
-//   "best_sellers",
-//   "recently_added",
-// ]);
-
-const optionalTrimmedString = (max) =>
-  z.preprocess(
-    (v) => {
-      if (v === undefined) return undefined;
-      if (v === null) return null;
-      if (typeof v !== "string") return v;
-      const trimmed = v.trim();
-      return trimmed === "" ? null : trimmed;
-    },
-    z.string().max(max).nullable().optional()
+    "date must be DD-MM-YYYY",
   );
 
-const optionalCuid = () =>
-  z.preprocess(
-    (v) => {
-      if (v === undefined) return undefined;
-      if (v === null) return null;
-      if (typeof v !== "string") return v;
-      const trimmed = v.trim();
-      return trimmed === "" ? null : trimmed;
-    },
-    z.string().cuid().nullable().optional()
-  );
 const filterSchema = z
   .string()
   .optional()
   .transform((v) => v ?? "all")
-  .refine((v) => ["all", "best_seller", "new_arrival"].includes(v), "invalid filter");
+  .refine(
+    (v) => ["all", "best_seller", "new_arrival"].includes(v),
+    "invalid filter",
+  );
+
+const optionalTrimmedString = (max) =>
+  z.preprocess((v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== "string") return v;
+
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  }, z.string().max(max).nullable().optional());
+
+const optionalCuid = () =>
+  z.preprocess((v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== "string") return v;
+
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  }, z.string().cuid().nullable().optional());
+
+const nullableString = (max = 5000) =>
+  z.preprocess((v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== "string") return v;
+
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  }, z.string().max(max).nullable().optional());
+
+const nullableUrl = () =>
+  z.preprocess((v) => {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
+    if (typeof v !== "string") return v;
+
+    const trimmed = v.trim();
+    return trimmed === "" ? null : trimmed;
+  }, z.string().url("must be a valid URL").nullable().optional());
+
+const numberLike = () =>
+  z.preprocess((v) => {
+    if (v === undefined || v === null || v === "") return undefined;
+    return Number(v);
+  }, z.number());
+
+const intLike = (defaultValue = 0) =>
+  z.preprocess((v) => {
+    if (v === undefined || v === null || v === "") return defaultValue;
+    return Number(v);
+  }, z.number().int());
+
+const booleanLike = (defaultValue = false) =>
+  z.preprocess((v) => {
+    if (v === undefined || v === null || v === "") return defaultValue;
+    if (typeof v === "boolean") return v;
+    if (typeof v === "string") return v.trim().toLowerCase() === "true";
+    return defaultValue;
+  }, z.boolean());
+
+const bookStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
+
+const bookTypeSchema = z.enum(["HARD_COPY", "EBOOK", "AUDIO_BOOK"]);
+
+/**
+ * ---------------------------------------------------------
+ * Book categories
+ * ---------------------------------------------------------
+ */
 
 export const adminBookCategoriesSchema = z.object({
   query: z.object({}).optional(),
 });
-// Category 
+
+/**
+ * ---------------------------------------------------------
+ * Categories
+ * ---------------------------------------------------------
+ */
+
 export const adminCreateCategorySchema = z.object({
   body: z.object({
     name: z.string().trim().min(1, "name is required"),
   }),
 });
+
 export const adminListCategoriesSchema = z.object({
   query: z.object({
-    search: z.string().optional().transform((v) => {
-      const value = v?.trim();
-      return value ? value : undefined;
-    }),
+    search: z
+      .string()
+      .optional()
+      .transform((v) => {
+        const value = v?.trim();
+        return value ? value : undefined;
+      }),
     page: paginationSchema.shape.page.optional(),
     limit: paginationSchema.shape.limit.optional(),
   }),
@@ -113,13 +183,23 @@ export const adminDeleteCategorySchema = z.object({
     categoryId: z.string().min(1, "categoryId is required"),
   }),
 });
+
+/**
+ * ---------------------------------------------------------
+ * Books
+ * ---------------------------------------------------------
+ */
+
 export const adminListBooksSchema = z.object({
   query: z
     .object({
-      search: z.string().optional().transform((v) => {
-        const value = v?.trim();
-        return value ? value : undefined;
-      }),
+      search: z
+        .string()
+        .optional()
+        .transform((v) => {
+          const value = v?.trim();
+          return value ? value : undefined;
+        }),
       filter: filterSchema.optional().default("all"),
       from_date: dateSchema.optional(),
       to_date: dateSchema.optional(),
@@ -158,84 +238,91 @@ export const adminGetBookSchema = z.object({
   }),
 });
 
-const bookStatusSchema = z
-  .string()
-  .optional()
-  .refine((v) => !v || ["ACTIVE", "INACTIVE"].includes(v), "status must be ACTIVE|INACTIVE");
-
-const bookTypeSchema = z
-  .string()
-  .optional()
-  .refine((v) => !v || ["HARD_COPY", "EBOOK", "AUDIOBOOK"].includes(v), "type invalid");
-
-const nullableString = (max = 5000) =>
-  z.string().max(max).nullable().optional();
-
-const nullableUrl = () =>
-  z.string().url("must be a valid URL").nullable().optional();
-
-const numberLike = () =>
-  z.union([z.number(), z.string()]).transform((v) => Number(v));
-
 export const adminCreateBookSchema = z.object({
   body: z
     .object({
       // required
-      name: z.string().min(1).max(250),
-      author: z.string().min(1).max(250),
-      category: z.string().min(1, "category is required"), // categoryId
+      name: z.string().trim().min(1, "name is required").max(250),
+      author: z.string().trim().min(1, "author is required").max(250),
+      category: z.string().trim().min(1, "category is required").max(250),
       type: bookTypeSchema.default("HARD_COPY"),
-      price: numberLike().refine((n) => !Number.isNaN(n) && n >= 0, "price invalid"),
+      price: numberLike().refine(
+        (n) => !Number.isNaN(n) && n >= 0,
+        "price invalid",
+      ),
 
       // optional
       malayalam_name: nullableString(250),
       author_malayalam: nullableString(250),
-      best_seller: z.boolean().optional().default(false),
+      best_seller: booleanLike(false).default(false),
       description: nullableString(5000),
       edition: nullableString(100),
       isbn: nullableString(50),
       num_of_pages: nullableString(50),
       publisher: nullableString(250),
       language: nullableString(50),
-      discount: z.string().nullable().optional(), // discountId
+
+      // allow empty string => null, or id string
+      discount: nullableString(100),
+
       status: bookStatusSchema.default("ACTIVE"),
-      award_winner: z.boolean().optional().default(false),
-      new_arrival: z.boolean().optional().default(false),
-      republication: z.boolean().optional().default(false),
-      highlight: z.boolean().optional().default(false),
+      award_winner: booleanLike(false).default(false),
+      new_arrival: booleanLike(false).default(false),
+      republication: booleanLike(false).default(false),
+      highlight: booleanLike(false).default(false),
       rank: nullableString(50),
-      unlimited_stock: z.boolean().optional().default(false),
-      stock: z.union([z.number().int(), z.string()]).optional().transform((v) => (v === undefined ? 0 : Number(v))),
+      unlimited_stock: booleanLike(false).default(false),
+      stock: intLike(0)
+        .refine((n) => n >= 0, "stock must be >= 0")
+        .default(0),
       cover_image_url: nullableUrl(),
     })
     .strict(),
 });
 
-
-
 export const adminUpdateBookSchema = z.object({
   params: z.object({
     bookId: z.string().cuid("Invalid bookId"),
   }),
+
   body: z
     .object({
-      name: z.string().trim().min(1).max(250).optional(),
-      author: z.string().trim().min(1).max(250).optional(),
+      name: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v !== "string") return v;
+        return v.trim();
+      }, z.string().min(1, "name is required").max(250).optional()),
 
-      // Better name than "category"
-      category: z.string().trim().cuid("Invalid category id").optional(),
+      author: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v !== "string") return v;
+        return v.trim();
+      }, z.string().min(1, "author is required").max(250).optional()),
 
-      type: bookTypeSchema.optional(),
+      category: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v !== "string") return v;
+        return v.trim();
+      }, z.string().trim().min(1, "category is required").max(250).optional()),
+
+      type: z.preprocess((v) => {
+        if (v === undefined || v === null || v === "") return undefined;
+        return v;
+      }, bookTypeSchema.optional()),
 
       price: z.preprocess((v) => {
-        if (v === undefined) return undefined;
-        if (typeof v === "string" && v.trim() === "") return undefined;
+        if (v === undefined || v === null || v === "") return undefined;
         return Number(v);
       }, z.number().finite().nonnegative().optional()),
 
       malayalam_name: optionalTrimmedString(250),
       author_malayalam: optionalTrimmedString(250),
-      best_seller: z.boolean().optional(),
+      best_seller: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().toLowerCase() === "true";
+        return v;
+      }, z.boolean().optional()),
       description: optionalTrimmedString(5000),
       edition: optionalTrimmedString(100),
       isbn: optionalTrimmedString(50),
@@ -243,21 +330,52 @@ export const adminUpdateBookSchema = z.object({
       publisher: optionalTrimmedString(250),
       language: optionalTrimmedString(50),
 
-      // empty string => null
       discount: optionalCuid(),
 
-      status: bookStatusSchema.optional(),
-      award_winner: z.boolean().optional(),
-      new_arrival: z.boolean().optional(),
-      republication: z.boolean().optional(),
-      highlight: z.boolean().optional(),
+      status: z.preprocess((v) => {
+        if (v === undefined || v === null || v === "") return undefined;
+        return v;
+      }, bookStatusSchema.optional()),
+
+      award_winner: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().toLowerCase() === "true";
+        return v;
+      }, z.boolean().optional()),
+
+      new_arrival: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().toLowerCase() === "true";
+        return v;
+      }, z.boolean().optional()),
+
+      republication: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().toLowerCase() === "true";
+        return v;
+      }, z.boolean().optional()),
+
+      highlight: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().toLowerCase() === "true";
+        return v;
+      }, z.boolean().optional()),
+
       rank: optionalTrimmedString(50),
 
-      unlimited_stock: z.boolean().optional(),
+      unlimited_stock: z.preprocess((v) => {
+        if (v === undefined) return undefined;
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().toLowerCase() === "true";
+        return v;
+      }, z.boolean().optional()),
 
       stock: z.preprocess((v) => {
-        if (v === undefined) return undefined;
-        if (typeof v === "string" && v.trim() === "") return undefined;
+        if (v === undefined || v === null || v === "") return undefined;
         return Number(v);
       }, z.number().int().min(0).optional()),
 
@@ -274,32 +392,43 @@ export const adminDeleteBookSchema = z.object({
     bookId: z.string().min(1, "bookId is required"),
   }),
 });
+
 export const adminExportBooksCsvSchema = z.object({
   query: z
     .object({
-      search: z.string().optional().transform((v) => {
-        const value = v?.trim();
-        return value ? value : undefined;
-      }),
-      filter: filterSchema.optional().default("all_books"),
+      search: z
+        .string()
+        .optional()
+        .transform((v) => {
+          const value = v?.trim();
+          return value ? value : undefined;
+        }),
+      filter: filterSchema.optional().default("all"),
       from_date: dateSchema.optional(),
       to_date: dateSchema.optional(),
       category: z.string().cuid("Invalid category").optional(),
     })
-    .refine(
-      (q) => {
-        if (!q.from_date || !q.to_date) return true;
+    .superRefine((q, ctx) => {
+      if (!q.from_date || !q.to_date) return;
 
-        const from = parseDDMMYYYY(q.from_date);
-        const to = parseDDMMYYYY(q.to_date);
+      const from = parseDDMMYYYY(q.from_date);
+      const to = parseDDMMYYYY(q.to_date);
 
-        if (!from || !to) return false;
-
-        return from <= to;
-      },
-      {
-        message: "from_date must be less than or equal to to_date",
-        path: ["to_date"],
+      if (!from || !to) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["to_date"],
+          message: "Invalid date format. Use DD-MM-YYYY",
+        });
+        return;
       }
-    ),
+
+      if (from > to) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["to_date"],
+          message: "from_date must be less than or equal to to_date",
+        });
+      }
+    }),
 });
