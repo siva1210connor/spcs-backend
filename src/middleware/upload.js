@@ -150,5 +150,5 @@ export const adUpload = createUploader({
     "image/gif",
     "image/webp",
   ],
-  maxFileSize: 5 * 1024 * 1024,
+  maxFileSize: 50 * 1024 * 1024,
 });

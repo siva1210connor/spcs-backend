@@ -2,6 +2,8 @@
 import { prisma } from "../../config/prisma.js";
 import { createAdminAuditLog } from "../../audit/audit.service.js";
 import { AUDIT_RESOURCE_TYPES } from "../../audit/audit.constants.js";
+import fs from "fs";
+import path from "path";
 
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
@@ -137,25 +139,73 @@ export async function adminDeleteAlbum({ req, id }) {
   try {
     const existing = await prisma.galleryAlbum.findUnique({
       where: { id },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        galleries: {
+          select: {
+            id: true,
+            images: {
+              select: {
+                imageUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
 
+    if (!existing) {
+      throw makeError("Album not found", 404, "ADMIN_GALLERY_ALBUM_NOT_FOUND");
+    }
+
+    // 🧠 Collect all image paths BEFORE delete
+    const imagePaths = [];
+
+    for (const gallery of existing.galleries) {
+      for (const img of gallery.images) {
+        if (img.imageUrl) {
+          imagePaths.push(img.imageUrl);
+        }
+      }
+    }
+
+    // 🗑️ Delete album (DB cascade handles children)
     await prisma.galleryAlbum.delete({
       where: { id },
     });
 
+    // 🧹 Delete files from disk
+    for (const url of imagePaths) {
+      try {
+        const filePath = path.join(process.cwd(), url.replace(/^\/+/, ""));
+
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (err) {
+        console.error("File delete failed:", url, err);
+      }
+    }
+
     const response = {
       msg: "deleted successfully",
     };
+
     await createAdminAuditLog({
       req,
       action: "DELETE",
       resourceType: AUDIT_RESOURCE_TYPES.ALBUM,
       resourceId: existing.id,
       message: "Gallery album deleted",
-      beforeJson: mapAlbumRow(existing),
+      beforeJson: {
+        id: existing.id,
+        name: existing.name,
+        totalImages: imagePaths.length,
+      },
       afterJson: null,
     });
+
     return response;
   } catch (err) {
     if (err?.code === "P2025") {
@@ -166,6 +216,7 @@ export async function adminDeleteAlbum({ req, id }) {
         err,
       );
     }
+
     throw makeError(
       "Failed to delete album",
       500,
@@ -425,9 +476,30 @@ export async function adminDeleteGallery({ req, id }) {
     if (!existing) {
       throw makeError("Gallery not found", 404, "ADMIN_GALLERY_NOT_FOUND");
     }
+
+    const imagePaths = existing.images
+      .map((img) => img.imageUrl)
+      .filter(Boolean);
+
     await prisma.gallery.delete({
       where: { id },
     });
+
+    for (const url of imagePaths) {
+      try {
+        const filePath = path.join(
+          process.cwd(),
+          url.replace(/^\/+/, "")
+        );
+
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (fileErr) {
+        console.error("Gallery image delete failed:", url, fileErr);
+      }
+    }
+
     await createAdminAuditLog({
       req,
       action: "DELETE",
@@ -440,11 +512,13 @@ export async function adminDeleteGallery({ req, id }) {
       },
       afterJson: null,
     });
+
     return { msg: "deleted successfully" };
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError("Gallery not found", 404, "ADMIN_GALLERY_NOT_FOUND", err);
     }
+
     throw makeError(
       "Failed to delete gallery",
       500,

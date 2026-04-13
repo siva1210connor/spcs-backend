@@ -9,7 +9,7 @@ import {
 } from "../services/bulletin.service.js";
 
 export const adminBulletinListController = asyncHandler(async (req, res) => {
-  const data = await adminListBulletin({ query: req.validated.query });
+  const data = await adminListBulletin({ req, query: req.validated.query });
   return ok(res, data, "Bulletin fetched");
 });
 
@@ -33,7 +33,7 @@ export const adminBulletinUpdateController = asyncHandler(async (req, res) => {
     throw makeError(
       "At least one field or file must be provided",
       400,
-      "ADMIN_BULLETIN_UPDATE_EMPTY"
+      "ADMIN_BULLETIN_UPDATE_EMPTY",
     );
   }
   const data = await adminUpdateBulletin({

@@ -2,6 +2,8 @@
 import { prisma } from "../../config/prisma.js";
 import { createAdminAuditLog } from "../../audit/audit.service.js";
 import { AUDIT_RESOURCE_TYPES } from "../../audit/audit.constants.js";
+import fs from "fs";
+import path from "path";
 
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
@@ -17,11 +19,12 @@ function mapArchiveRow(row) {
       ? "PDF"
       : row.fileType === "application/vnd.ms-excel"
         ? "XLS"
-        : row.fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        : row.fileType ===
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           ? "XLSX"
           : row.fileType === "text/csv"
             ? "CSV"
-            : row.fileType ?? null;
+            : (row.fileType ?? null);
 
   return {
     id: row.id,
@@ -36,8 +39,8 @@ export async function adminListArchives({ query } = {}) {
   try {
     const where = query?.search
       ? {
-        title: { contains: query.search, mode: "insensitive" },
-      }
+          title: { contains: query.search, mode: "insensitive" },
+        }
       : {};
 
     const rows = await prisma.archive.findMany({
@@ -69,7 +72,7 @@ export async function adminCreateArchive({ req, input, file }) {
       throw makeError(
         "archive_file is required",
         400,
-        "ADMIN_ARCHIVE_FILE_REQUIRED"
+        "ADMIN_ARCHIVE_FILE_REQUIRED",
       );
     }
 
@@ -168,6 +171,25 @@ export async function adminUpdateArchive({ req, id, input, file }) {
       },
     });
 
+    if (file && existing.fileUrl && existing.fileUrl !== updated.fileUrl) {
+      try {
+        const oldFilePath = path.join(
+          process.cwd(),
+          existing.fileUrl.replace(/^\/+/, ""),
+        );
+
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      } catch (fileErr) {
+        console.error(
+          "Archive old file delete failed:",
+          existing.fileUrl,
+          fileErr,
+        );
+      }
+    }
+
     const response = {
       msg: "updated successfully",
       item: mapArchiveRow(updated),
@@ -225,6 +247,21 @@ export async function adminDeleteArchive({ req, id }) {
       where: { id },
     });
 
+    if (existing.fileUrl) {
+      try {
+        const filePath = path.join(
+          process.cwd(),
+          existing.fileUrl.replace(/^\/+/, ""),
+        );
+
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      } catch (fileErr) {
+        console.error("Archive file delete failed:", existing.fileUrl, fileErr);
+      }
+    }
+
     const response = {
       msg: "deleted successfully",
     };
@@ -246,9 +283,11 @@ export async function adminDeleteArchive({ req, id }) {
     return response;
   } catch (err) {
     if (err?.code && err?.statusCode) throw err;
+
     if (err?.code === "P2025") {
       throw makeError("Archive not found", 404, "ADMIN_ARCHIVE_NOT_FOUND", err);
     }
+
     throw makeError(
       "Failed to delete archive",
       500,
@@ -257,7 +296,6 @@ export async function adminDeleteArchive({ req, id }) {
     );
   }
 }
-
 
 export async function adminDownloadArchive({ id }) {
   try {

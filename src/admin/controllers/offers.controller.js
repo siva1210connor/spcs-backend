@@ -40,7 +40,7 @@ export const adminOfferUpdateController = asyncHandler(async (req, res) => {
     throw makeError(
       "At least one field or file must be provided",
       400,
-      "ADMIN_OFFER_UPDATE_EMPTY"
+      "ADMIN_OFFER_UPDATE_EMPTY",
     );
   }
 
@@ -59,6 +59,6 @@ export const adminOfferUpdateController = asyncHandler(async (req, res) => {
  */
 export const adminOfferDeleteController = asyncHandler(async (req, res) => {
   const { offerId } = req.validated.params;
-  const data = await adminDeleteOffer(offerId);
+  const data = await adminDeleteOffer(req, offerId);
   return ok(res, data, data.msg);
 });

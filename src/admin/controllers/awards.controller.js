@@ -1,7 +1,8 @@
 // src/admin/services/awards.service.js
 import { prisma } from "../../config/prisma.js";
-import { adminCreateAward, adminListAwards, adminUpdateAward } from "../services/awards.service.js";
+import { adminCreateAward, adminDeleteAward, adminListAwards, adminUpdateAward } from "../services/awards.service.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
+import { ok } from "../../utils/apiResponse.js";
 function makeError(message, statusCode, code, cause) {
   const err = new Error(message);
   err.statusCode = statusCode;

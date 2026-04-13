@@ -81,20 +81,15 @@ export async function adminListOffers({ query } = {}) {
       "Failed to fetch offers",
       500,
       "ADMIN_OFFERS_LIST_FAILED",
-      err
+      err,
     );
   }
 }
 
-
 export async function adminCreateOffer({ req, input, file }) {
   try {
     if (!file) {
-      throw makeError(
-        "image is required",
-        400,
-        "ADMIN_OFFER_IMAGE_REQUIRED"
-      );
+      throw makeError("image is required", 400, "ADMIN_OFFER_IMAGE_REQUIRED");
     }
 
     const created = await prisma.offer.create({
@@ -138,7 +133,7 @@ export async function adminCreateOffer({ req, input, file }) {
       "Failed to create offer",
       500,
       "ADMIN_OFFER_CREATE_FAILED",
-      err
+      err,
     );
   }
 }
@@ -218,7 +213,7 @@ export async function adminUpdateOffer({ req, offerId, input, file }) {
       "Failed to update offer",
       500,
       "ADMIN_OFFER_UPDATE_FAILED",
-      err
+      err,
     );
   }
 }
@@ -226,7 +221,7 @@ export async function adminUpdateOffer({ req, offerId, input, file }) {
 export async function adminDeleteOffer(req, offerId) {
   try {
     const existing = await prisma.offer.findUnique({
-      where: { offerId },
+      where: { id: offerId },
       select: {
         id: true,
         offerImageUrl: true,

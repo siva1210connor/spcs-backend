@@ -25,7 +25,16 @@ adminAdsRouter.post(
   "/",
   adUpload.single("image"),
   validate(adminCreateAdSchema),
-  adminAdsCreateController
+  adminAdsCreateController,
 );
-adminAdsRouter.put("/:id", validate(adminUpdateAdSchema), adminAdsUpdateController);
-adminAdsRouter.delete("/:id", validate(adminDeleteAdSchema), adminAdsDeleteController);
+adminAdsRouter.put(
+  "/:id",
+  adUpload.single("image"),
+  validate(adminUpdateAdSchema),
+  adminAdsUpdateController,
+);
+adminAdsRouter.delete(
+  "/:id",
+  validate(adminDeleteAdSchema),
+  adminAdsDeleteController,
+);

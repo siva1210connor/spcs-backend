@@ -33,7 +33,7 @@ async function deleteLocalAdImageIfExists(imageUrl) {
       "Ad deleted, but failed to remove image from storage",
       500,
       "ADMIN_AD_IMAGE_DELETE_FAILED",
-      err
+      err,
     );
   }
 }
@@ -122,7 +122,7 @@ export async function adminCreateAd(req, input) {
   }
 }
 
-export async function adminUpdateAd({ req, id, input }) {
+export async function adminUpdateAd({ req, id, input, file }) {
   try {
     const existing = await prisma.ad.findUnique({
       where: { id },
@@ -131,18 +131,27 @@ export async function adminUpdateAd({ req, id, input }) {
         type: true,
         imageUrl: true,
         link: true,
+        createdAt: true,
       },
     });
 
     if (!existing) {
       throw makeError("Ad not found", 404, "ADMIN_AD_NOT_FOUND");
     }
+
     const data = {};
 
-    if (input.type !== undefined) data.type = mapAdType(input.type);
-    if (input.ad_image_url !== undefined) data.imageUrl = input.ad_image_url;
-    if (Object.prototype.hasOwnProperty.call(input, "link"))
-      data.link = input.link;
+    if (input.type !== undefined) {
+      data.type = mapAdType(input.type);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "link")) {
+      data.link = input.link ?? null;
+    }
+
+    if (file) {
+      data.imageUrl = `/uploads/ads/${file.filename}`;
+    }
 
     const updated = await prisma.ad.update({
       where: { id },
@@ -152,34 +161,42 @@ export async function adminUpdateAd({ req, id, input }) {
         type: true,
         imageUrl: true,
         link: true,
+        createdAt: true,
       },
     });
+
+    if (file && existing.imageUrl && existing.imageUrl !== updated.imageUrl) {
+      await deleteLocalAdImageIfExists(existing.imageUrl);
+    }
 
     const response = {
       msg: "updated successfully",
       item: mapAdRow(updated),
     };
+
     await createAdminAuditLog({
       req,
       action: "UPDATE",
       resourceType: AUDIT_RESOURCE_TYPES.AD,
       resourceId: updated.id,
       message: "Ad updated",
-      beforeJson: {
-        ...existing,
-        ad_image_url: existing.imageUrl,
-      },
+      beforeJson: mapAdRow(existing),
       afterJson: response.item,
     });
+
     return response;
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError("Ad not found", 404, "ADMIN_AD_NOT_FOUND", err);
     }
+
+    if (err?.statusCode || err?.status) {
+      throw err;
+    }
+
     throw makeError("Failed to update ad", 500, "ADMIN_AD_UPDATE_FAILED", err);
   }
 }
-
 
 export async function adminDeleteAd({ req, id }) {
   try {

@@ -173,6 +173,7 @@ export async function adminReplyFeedback({ req, id, message }) {
       beforeJson: existing,
       afterJson: response.item,
     });
+    return response;
   } catch (err) {
     if (err?.code === "P2025") {
       throw makeError(

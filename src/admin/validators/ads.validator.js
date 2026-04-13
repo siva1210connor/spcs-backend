@@ -35,7 +35,6 @@ export const adminUpdateAdSchema = z.object({
   body: z
     .object({
       type: adTypeSchema.optional(),
-      ad_image_url: z.string().url("ad_image_url must be a valid URL").optional(),
       link: nullableUrl(),
     })
     .refine((body) => Object.keys(body).length > 0, {
